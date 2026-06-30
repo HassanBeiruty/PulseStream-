@@ -1,10 +1,14 @@
 // ---------------------------------------------------------------------------
 // Distribution layer — entry point (Phase 3 WebSocket relay)
 //
-// This file hosts our Express + WebSocket server. It connects the Feed Handler,
-// Normalizer, and Hub together on startup. When clients connect to our own
-// WebSocket server, they send SUBSCRIBE/UNSUBSCRIBE events. The server
-// registers them to the in-memory Hub and relays updates, throttled to 300ms.
+// This file hosts our Express + WebSocket server. On startup it wires the
+// upstream pipeline together in order:
+//
+//   Feed Handler -> Normalizer -> Candle Aggregator (trades only) -> Hub
+//
+// When clients connect to our own WebSocket server, they send
+// SUBSCRIBE/UNSUBSCRIBE events. The server registers them to the in-memory Hub
+// and relays updates, throttled to 300ms.
 // ---------------------------------------------------------------------------
 
 const path = require('path');
@@ -79,7 +83,9 @@ const feed = new BinanceFeedHandler();
 feed.on('raw', ({ stream, data }) => {
   const update = normalize(stream, data);
   if (update) {
-    // If it's a trade update, aggregate it into 1m candles
+    // Only @trade updates carry a `quantity`; @bookTicker updates don't. So the
+    // presence of `quantity` is how we tell "this is a trade" and feed it to the
+    // candle aggregator. The resulting 1m candle rides along on the same update.
     if (update.quantity !== undefined) {
       const activeCandle = candleAggregator.update(update);
       if (activeCandle) {
@@ -145,7 +151,9 @@ wss.on('connection', (ws) => {
   // Setup throttled flush interval (once every 300ms) for this client
   const flushInterval = setInterval(() => {
     if (pendingUpdates.size > 0) {
-      for (const [symbol, record] of pendingUpdates.entries()) {
+      // One UPDATE per symbol that ticked since the last flush (we only kept the
+      // latest record per symbol, so fast upstream ticks collapse into one send).
+      for (const record of pendingUpdates.values()) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'UPDATE', data: record }));
         }

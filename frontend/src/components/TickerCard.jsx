@@ -60,7 +60,7 @@ function TickerCard({ record, isSelected, onClick }) {
   return (
     <div className={`ticker-card ${isSelected ? 'selected' : ''} ${isStale ? 'stale' : ''}`} onClick={onClick} id={`card-${symbol}`}>
       <div className="card-header">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="card-symbol-group">
           <span className="symbol-name">{symbol}</span>
           {!lastReceivedAt && <span className="waiting-badge">Waiting</span>}
           {lastReceivedAt && isStale && <span className="stale-badge">Stale</span>}

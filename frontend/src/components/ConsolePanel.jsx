@@ -14,18 +14,7 @@ function ConsolePanel({ logs, onClear }) {
     <section className="console-panel">
       <div className="console-header">
         <span className="console-title">Protocol Feed Console</span>
-        <button
-          onClick={onClear}
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-muted)',
-            fontSize: '0.75rem',
-            cursor: 'pointer',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '4px',
-          }}
-        >
+        <button onClick={onClear} className="btn-clear">
           Clear
         </button>
       </div>
