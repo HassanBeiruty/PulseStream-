@@ -1,3 +1,22 @@
+// ---------------------------------------------------------------------------
+// App (frontend — a HUB CONSUMER)
+//
+// The browser never talks to Binance. It connects to OUR OWN WebSocket server
+// (the distribution layer) and speaks a tiny JSON protocol:
+//
+//   client -> server:  { type: 'SUBSCRIBE'   | 'UNSUBSCRIBE', symbol }
+//                      { type: 'SET_ALERT'   | 'REMOVE_ALERT', ... }
+//   server -> client:  { type: 'UPDATE',          data: goldenRecord }
+//                      { type: 'FEED_STATUS',      status }
+//                      { type: 'ALERT_CONFIRMED' | 'ALERT_REMOVED' | 'ALERT_TRIGGERED', data }
+//
+// So the watchlist buttons literally drive subscribe/unsubscribe over the wire,
+// and price alerts are just another consumer of the same hub updates.
+//
+// All of the real state lives in the handful of useState hooks below; the JSX
+// at the bottom is a pure render of that state.
+// ---------------------------------------------------------------------------
+
 import React, { useState, useEffect, useRef } from 'react';
 import TickerCard from './components/TickerCard';
 import ConsolePanel from './components/ConsolePanel';
@@ -322,7 +341,7 @@ function App() {
         {notifications.map((n) => (
           <div key={n.id} className="toast-item">
             <div className="toast-header">
-              <span style={{ color: 'var(--color-warning)' }}>⚠ {n.title}</span>
+              <span className="toast-title-warning">⚠ {n.title}</span>
               <button className="toast-close" onClick={() => closeNotification(n.id)}>×</button>
             </div>
             <div className="toast-body">{n.message}</div>
@@ -376,15 +395,16 @@ function App() {
             })}
         </section>
 
-        {/* Live chart and Alerts side-by-side dashboard row */}
+        {/* Live chart and Alerts side-by-side dashboard row.
+            The 2:1 column split is handled by `.dashboard-mid-row` (CSS grid). */}
         <div className="dashboard-mid-row">
           {/* Chart Panel */}
-          <section className="chart-card" style={{ flex: 2 }}>
+          <section className="chart-card">
             {selectedSymbol && watchlist.includes(selectedSymbol) && historicalCandles.length > 0 ? (
               <>
                 <div className="chart-header">
                   <span className="chart-title">{selectedSymbol} Live Price Chart</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  <span className="chart-subtitle">
                     Interval: 1m (Close Price)
                   </span>
                 </div>
@@ -395,14 +415,14 @@ function App() {
                 />
               </>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px', color: 'var(--text-muted)' }}>
+              <div className="chart-empty">
                 No active symbol selected. Click a price card or toggle a symbol to view chart.
               </div>
             )}
           </section>
 
           {/* Alerts Panel */}
-          <section className="alerts-card" style={{ flex: 1 }}>
+          <section className="alerts-card">
             <h2>Price Alerts Manager</h2>
             <form className="alerts-form" onSubmit={handleSetAlert}>
               <div className="form-group">
@@ -447,8 +467,8 @@ function App() {
               </button>
             </form>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+            <div className="active-alerts-section">
+              <span className="section-label">
                 Active Alerts ({activeAlerts.length})
               </span>
               <div className="active-alerts-list">

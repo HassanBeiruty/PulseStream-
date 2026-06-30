@@ -144,7 +144,7 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
   }, [activeCandle]);
 
   return (
-    <div style={{ height: '350px', position: 'relative' }}>
+    <div className="chart-canvas-wrap">
       <canvas ref={canvasRef} />
     </div>
   );

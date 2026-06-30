@@ -656,3 +656,71 @@ main {
   50% { opacity: 1; }
   100% { opacity: 0.6; }
 }
+
+/* ---------------------------------------------------------------------------
+   Helper classes
+   These were previously written as inline style={{...}} blocks inside the JSX.
+   Moving them here keeps the components readable (you can see the structure
+   and data flow without wading through styling) and changes nothing visually.
+   --------------------------------------------------------------------------- */
+
+/* Small uppercase caption, e.g. the "Active Alerts (n)" label */
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* Subtitle next to the chart title ("Interval: 1m (Close Price)") */
+.chart-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Placeholder shown in the chart panel when no symbol is selected */
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  color: var(--text-muted);
+}
+
+/* Wrapper around the active-alerts list */
+.active-alerts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Symbol + badge group in a ticker card header */
+.card-symbol-group {
+  display: flex;
+  align-items: center;
+}
+
+/* Warning-coloured toast title */
+.toast-title-warning {
+  color: var(--color-warning);
+}
+
+/* "Clear" button in the console panel header */
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+/* Fixed-height wrapper that the Chart.js <canvas> draws into */
+.chart-canvas-wrap {
+  height: 350px;
+  position: relative;
+}
