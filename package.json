@@ -1,0 +1,20 @@
+{
+  "name": "live-market-data-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Training project: a multiplexed live market-data hub built on Binance public streams.",
+  "type": "commonjs",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "feed:demo": "node scripts/feed-demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
