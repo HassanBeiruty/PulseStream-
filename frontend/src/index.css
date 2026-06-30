@@ -1,0 +1,10 @@
+/* CSS reset and box sizing */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0f17;
+}
