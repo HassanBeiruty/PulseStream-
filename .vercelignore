@@ -1,0 +1,6 @@
+node_modules
+frontend/node_modules
+server
+scripts
+DOCUMENTATION.md
+CLAUDE.md

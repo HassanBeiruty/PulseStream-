@@ -60,6 +60,20 @@ header {
   font-weight: 700;
   font-size: 0.9rem;
   color: #fff;
+  animation: logo-pulse 2s ease-out infinite;
+}
+
+/* A soft heartbeat glow radiating from the logo — the "pulse" in PulseStream */
+@keyframes logo-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 header h1 {

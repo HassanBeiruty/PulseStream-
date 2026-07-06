@@ -21,6 +21,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import TickerCard from './components/TickerCard';
 import ConsolePanel from './components/ConsolePanel';
 import PriceChart from './components/PriceChart';
+import { fetchHealth, fetchHistory, createSocket, socketTargetLabel } from './dataSource';
 import './App.css';
 
 function App() {
@@ -43,6 +44,21 @@ function App() {
   const [upstreamStatus, setUpstreamStatus] = useState('connecting');
 
   const socketRef = useRef(null);
+  const prevTabPriceRef = useRef(null);
+
+  // Small polish: show the selected symbol's live price (with tick direction)
+  // in the browser tab, like real trading dashboards do.
+  useEffect(() => {
+    const price = selectedSymbol ? records[selectedSymbol]?.lastPrice : null;
+    if (price === null || price === undefined) {
+      document.title = 'Live Market Data Hub';
+      return;
+    }
+    const prev = prevTabPriceRef.current;
+    const arrow = prev !== null && price !== prev ? (price > prev ? ' ▲' : ' ▼') : '';
+    prevTabPriceRef.current = price;
+    document.title = `${selectedSymbol} ${price.toLocaleString()}${arrow} · Live Market Data Hub`;
+  }, [records, selectedSymbol]);
 
   // Helper to add log entries with a timestamp
   const logMessage = (type, text) => {
@@ -63,8 +79,7 @@ function App() {
   // 1. Fetch active symbols from server REST endpoint
   useEffect(() => {
     logMessage('SYSTEM', 'Fetching active symbols config...');
-    fetch('/health')
-      .then((res) => res.json())
+    fetchHealth()
       .then((data) => {
         const fetchedSymbols = data.symbols || [];
         const upperSymbols = fetchedSymbols.map(s => s.toUpperCase());
@@ -105,8 +120,7 @@ function App() {
     }
 
     logMessage('SYSTEM', `Fetching 1m candle history for ${selectedSymbol}...`);
-    fetch(`/api/history?symbol=${selectedSymbol}`)
-      .then((res) => res.json())
+    fetchHistory(selectedSymbol)
       .then((data) => {
         if (data.candles) {
           setHistoricalCandles(data.candles);
@@ -125,14 +139,10 @@ function App() {
     let reconnectTimer;
 
     const connectWS = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
-      const wsUrl = `${protocol}//${host}`;
-
-      logMessage('SYSTEM', `Opening WebSocket connection to ${wsUrl}...`);
+      logMessage('SYSTEM', `Opening WebSocket connection to ${socketTargetLabel()}...`);
       setConnectionStatus('connecting');
 
-      const ws = new WebSocket(wsUrl);
+      const ws = createSocket();
       socketRef.current = ws;
 
       ws.onopen = () => {
