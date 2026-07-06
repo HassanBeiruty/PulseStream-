@@ -361,7 +361,19 @@ function App() {
 
       <header>
         <div className="logo-group">
-          <div className="logo-icon">H</div>
+          <div className="logo-icon">
+            {/* Same ECG heartbeat mark as favicon.svg */}
+            <svg viewBox="0 0 64 64" width="18" height="18" aria-hidden="true">
+              <polyline
+                points="9 36 20 36 26 21 34 47 41 27 45 36 55 36"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="6.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
           <h1>Live Market Data Hub</h1>
         </div>
         <div className={`status-badge ${connectionStatus === 'connected' ? upstreamStatus : connectionStatus}`}>
