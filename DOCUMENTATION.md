@@ -59,7 +59,7 @@ These terms appear everywhere in the code. Learn them once here.
 
 | Term | Technical | Business / plain English |
 |---|---|---|
-| **Symbol** | An identifier like `BTCUSDT` | "Bitcoin priced in US-dollar-stablecoin." The thing you're tracking. `ETHUSDT` = Ethereum, `SOLUSDT` = Solana. |
+| **Symbol** | An identifier like `BTCUSDT` | "Bitcoin priced in US-dollar-stablecoin." The thing you're tracking. `ETHUSDT` = Ethereum, `PAXGUSDT` = gold-backed token. |
 | **Tick** | A single market event (one trade, or one bid/ask change) | The smallest unit of "something just happened in the market." Liquid markets tick many times per second. |
 | **Trade** | An executed transaction: someone bought from someone else at a price | Proof of a *real* price — money actually changed hands at this number. |
 | **Last price** | The price of the most recent trade | "What's BTC trading at right now?" → this number. |

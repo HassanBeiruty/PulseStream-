@@ -9,7 +9,12 @@
 module.exports = {
   // The fixed pool of symbols the app supports. The runtime watchlist
   // (Phase 5) lets the user subscribe/unsubscribe within this pool.
-  symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+  //
+  // PAXGUSDT (PAX Gold) is a gold-backed token — 1 PAXG ≈ 1 troy oz of gold —
+  // so it's how we surface "gold" while staying on Binance's single public
+  // feed. Binance has no silver market, so silver is intentionally absent.
+  // Order here is the display order in the UI; gold is listed first.
+  symbols: ['PAXGUSDT', 'BTCUSDT', 'ETHUSDT'],
 
   // Port OUR OWN server listens on (Express now; our WebSocket distribution
   // server will share this process in a later phase).

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { symbolLabel } from '../dataSource';
 
 function TickerCard({ record, isSelected, onClick }) {
   const [flashClass, setFlashClass] = useState('');
@@ -61,7 +62,7 @@ function TickerCard({ record, isSelected, onClick }) {
     <div className={`ticker-card ${isSelected ? 'selected' : ''} ${isStale ? 'stale' : ''}`} onClick={onClick} id={`card-${symbol}`}>
       <div className="card-header">
         <div className="card-symbol-group">
-          <span className="symbol-name">{symbol}</span>
+          <span className="symbol-name">{symbolLabel(symbol)}</span>
           {!lastReceivedAt && <span className="waiting-badge">Waiting</span>}
           {lastReceivedAt && isStale && <span className="stale-badge">Stale</span>}
         </div>

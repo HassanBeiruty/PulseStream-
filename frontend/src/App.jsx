@@ -21,7 +21,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import TickerCard from './components/TickerCard';
 import ConsolePanel from './components/ConsolePanel';
 import PriceChart from './components/PriceChart';
-import { fetchHealth, fetchHistory, createSocket, socketTargetLabel } from './dataSource';
+import { fetchHealth, fetchHistory, createSocket, socketTargetLabel, symbolLabel } from './dataSource';
 import './App.css';
 
 function App() {
@@ -394,7 +394,7 @@ function App() {
                 className={`watchlist-btn ${isActive ? 'active' : ''}`}
                 onClick={() => toggleWatchlist(upper)}
               >
-                {isActive ? '✓' : '+'} {upper}
+                {isActive ? '✓' : '+'} {symbolLabel(upper)}
               </button>
             );
           })}
@@ -425,7 +425,7 @@ function App() {
             {selectedSymbol && watchlist.includes(selectedSymbol) && historicalCandles.length > 0 ? (
               <>
                 <div className="chart-header">
-                  <span className="chart-title">{selectedSymbol} Live Price Chart</span>
+                  <span className="chart-title">{symbolLabel(selectedSymbol)} Live Price Chart</span>
                   <span className="chart-subtitle">
                     Interval: 1m (Close Price)
                   </span>
@@ -456,7 +456,7 @@ function App() {
                 >
                   {watchlist.map((sym) => (
                     <option key={sym} value={sym}>
-                      {sym}
+                      {symbolLabel(sym)}
                     </option>
                   ))}
                 </select>
@@ -500,7 +500,7 @@ function App() {
                   activeAlerts.map((alert) => (
                     <div key={alert.id} className="active-alert-item">
                       <span>
-                        {alert.symbol} {alert.condition === 'ABOVE' ? '≥' : '≤'} {alert.value}
+                        {symbolLabel(alert.symbol)} {alert.condition === 'ABOVE' ? '≥' : '≤'} {alert.value}
                       </span>
                       <button
                         className="btn-delete-alert"

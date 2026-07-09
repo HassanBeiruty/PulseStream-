@@ -23,8 +23,11 @@
 // ---------------------------------------------------------------------------
 
 // Fixed symbol pool. In server mode this comes from server/config.js via
-// /health; direct mode has no server, so the pool is repeated here.
-export const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+// /health; direct mode has no server, so the pool is repeated here. Keep this
+// in sync with server/config.js. PAXGUSDT (PAX Gold) is a gold-backed token
+// standing in for "gold"; Binance has no silver market. Order = UI order, so
+// gold is first.
+export const SYMBOLS = ['PAXGUSDT', 'BTCUSDT', 'ETHUSDT'];
 
 // Binance's dedicated public market-data endpoints — no API key, CORS-enabled,
 // recommended by Binance docs for browser/market-data-only consumers.

@@ -18,6 +18,19 @@ import { DirectFeedSocket, SYMBOLS, BINANCE_REST_BASE } from './directFeed';
 
 export const DIRECT_MODE = import.meta.env.VITE_DATA_MODE === 'direct';
 
+// Friendly display names for tickers that aren't self-explanatory. This is
+// PRESENTATION ONLY: the raw Binance symbol (e.g. "PAXGUSDT") stays the
+// identifier used for subscribe/unsubscribe, history, alerts and record keys.
+// symbolLabel() only changes what the user reads on screen.
+const SYMBOL_LABELS = {
+  PAXGUSDT: 'Gold (PAXG)',
+};
+
+export function symbolLabel(symbol) {
+  if (!symbol) return symbol;
+  return SYMBOL_LABELS[symbol.toUpperCase()] || symbol;
+}
+
 // Replaces GET /health — returns the configured symbol pool
 export function fetchHealth() {
   if (DIRECT_MODE) {

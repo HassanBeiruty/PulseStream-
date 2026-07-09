@@ -49,7 +49,7 @@ Plus [server/candleAggregator.js](server/candleAggregator.js) — builds 1-minut
 - **Price alerts** — set a threshold; an in-page notification fires when a tick crosses it.
 - **Reconnect with exponential backoff + jitter** — with console logging of each retry.
 
-Configured symbols: `BTCUSDT`, `ETHUSDT`, `SOLUSDT` (edit in [server/config.js](server/config.js)).
+Configured symbols: `PAXGUSDT`, `BTCUSDT`, `ETHUSDT` (edit in [server/config.js](server/config.js)).
 
 ---
 
