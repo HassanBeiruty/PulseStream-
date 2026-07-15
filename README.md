@@ -1,8 +1,10 @@
-# PulseStream — Live Market Data Hub
+# PulseStream — Live Market Data Terminal
 
-A learning project that builds a **multiplexed live market-data hub** on top of Binance's free public WebSocket streams. One upstream connection ingests real-time trades and best bid/ask, normalizes them into a single internal schema, and fans them out to many browser clients — with self-built 1-minute OHLCV candles, a live chart, a watchlist, and price alerts.
+A learning project that builds a **multiplexed live market-data hub** on top of Binance's free public WebSocket streams, presented as a **trading-terminal UI** — ticker tape, market watch, live chart with instrument bar (last / session Δ / bid / ask / spread in bps), alert ticket, and a console/alerts blotter. One upstream connection ingests real-time trades and best bid/ask, normalizes them into a single internal schema, and fans them out to many consumers — with self-built 1-minute OHLCV candles, a live watchlist, and price alerts.
 
 > Market data only — no API key, no trading, no money movement. The market runs 24/7 so there's always live data to watch.
+
+**Dual-runtime by design (Phase 7):** the processing core (normalizer, candle aggregator, hub, alert book) lives in [`/shared`](shared/) as isomorphic ESM modules. Locally it runs inside the Node distribution server (**hub mode**); on the static Vercel deploy it runs in the browser (**direct mode**) behind the same `DataFeed` interface — one implementation, two runtimes, zero drift.
 
 ---
 
@@ -24,32 +26,50 @@ A learning project that builds a **multiplexed live market-data hub** on top of 
 
 ---
 
-## Architecture (four layers)
+## Architecture (four layers + an isomorphic core)
 
 Each layer is named with the real industry term and kept in its own module. Nothing downstream of the feed handler ever touches a raw Binance message.
 
 | Layer | File | Responsibility |
 |-------|------|----------------|
 | **Feed handler** (ingestion) | [server/feedHandler.js](server/feedHandler.js) | Owns the upstream Binance connection. Subscribes to streams, detects a stale/dead connection via heartbeat, reconnects with exponential backoff + jitter. |
-| **Normalizer** | [server/normalizer.js](server/normalizer.js) | Converts raw Binance shapes into one internal schema (`{ symbol, lastPrice, bestBid, bestAsk, lastTradeTime, source }`). |
-| **Hub / pub-sub broker** (distribution) | [server/hub.js](server/hub.js) | Holds the current normalized **golden record** per symbol in memory; lets internal consumers subscribe/unsubscribe and pushes updates to them. |
-| **WebSocket server** (distribution to frontend) | [server/index.js](server/index.js) | The app's own WebSocket server. Clients send subscribe/unsubscribe; the server relays hub updates, **throttled to ~300ms** per symbol. Also hosts price alerts as hub consumers. |
+| **Normalizer** | [shared/normalizer.js](shared/normalizer.js) | Converts raw Binance shapes into one internal schema (`{ symbol, lastPrice, bestBid, bestAsk, lastTradeTime, source }`). |
+| **Candle aggregator** | [shared/candleAggregator.js](shared/candleAggregator.js) | Builds 1-minute OHLCV candles from the raw trade stream in code (not pre-made provider candles). |
+| **Hub / pub-sub broker** (distribution) | [shared/hub.js](shared/hub.js) | Holds the current normalized **golden record** per symbol in memory; lets internal consumers subscribe/unsubscribe and pushes updates to them. |
+| **WebSocket server** (distribution to frontend) | [server/index.js](server/index.js) | The app's own WebSocket server. Clients send subscribe/unsubscribe; the server relays hub updates, **throttled to ~300ms** per symbol. Also hosts price alerts (via the shared [alert book](shared/alertBook.js)) as hub consumers. |
 
-Plus [server/candleAggregator.js](server/candleAggregator.js) — builds 1-minute OHLCV candles from the raw trade stream in code (not pre-made provider candles).
+### Ports & adapters (the frontend's data layer)
+
+The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/src/feed/index.js)) and never a concrete transport. Two adapters fulfil it, selected at build time:
+
+- **`HubSocketFeed`** ([frontend/src/feed/hubSocketFeed.js](frontend/src/feed/hubSocketFeed.js)) — default. A WebSocket to our distribution server; the JSON wire protocol (constants in [shared/protocol.js](shared/protocol.js)) lives in the adapter, not the UI.
+- **`DirectBinanceFeed`** ([frontend/src/feed/directBinanceFeed.js](frontend/src/feed/directBinanceFeed.js)) — `VITE_DATA_MODE=direct` (the static Vercel deploy, where no backend exists). A browser-side feed handler pushes raw messages through the **same shared normalizer → candle aggregator → hub → alert book** pipeline the server runs.
 
 ---
 
 ## Features
 
-- **Live price ticker** — pushed over WebSocket, never polled.
+**Terminal UI**
+- **Ticker tape** — live strip of the whole symbol pool with session Δ% (signed + arrowed, colorblind-safe by construction).
+- **Market watch** — dense live rows (last / session Δ / bid / ask) with tick-direction row flashes, staleness badges, and +/× toggles that drive **real subscribe/unsubscribe** messages.
+- **Instrument bar** — big live last price, session Δ, bid/ask, **spread in absolute and basis points**, and the live self-built 1m OHLCV bucket.
+- **Live chart** — Chart.js, backfilled from REST klines on load, then continued from self-built candles.
+- **Alert ticket** — order-ticket-style panel (▲ Above / ▼ Below sides); triggered alerts toast in-page.
+- **Blotter** — bottom tabs: the protocol console (SUBSCRIBE/UPDATE/alert log) and the active-alerts table.
+
+**Paper trading (simulated — no real orders, ever)**
+- **Order ticket** — BUY/SELL × MARKET/LIMIT with live estimated notional + fee; trades the selected instrument.
+- **Simulated execution against live top-of-book** ([shared/oms.js](shared/oms.js)) — market orders fill at the touch (taker), marketable limits fill at the touch with price improvement, resting limits fill at their limit when crossed; **fee in bps** on every fill.
+- **Positions & P&L** — signed long/short positions with **average-cost accounting** (including flips through zero), live unrealized P&L marked to last, realized P&L net of fees; header shows total P&L; book persists in localStorage.
+- **Blotter tabs** — Console · Positions · Orders (cancelable) · Fills · Alerts.
+
+**Data plumbing**
+- **Live prices pushed over WebSocket**, never polled; UI updates **throttled to ~300ms** per symbol.
 - **Connection status** — `live` / `reconnecting` / `stale` (stale = connection open but no fresh data for >10s).
 - **Self-built 1m OHLCV candles** — aggregated from the trade stream.
-- **Live chart** — Chart.js, backfilled from REST klines on load, then continued from self-built candles.
-- **Watchlist** — add/remove symbols at runtime, driving real subscribe/unsubscribe messages.
-- **Price alerts** — set a threshold; an in-page notification fires when a tick crosses it.
-- **Reconnect with exponential backoff + jitter** — with console logging of each retry.
+- **Reconnect with exponential backoff + full jitter** — same policy in both runtimes.
 
-Configured symbols: `PAXGUSDT`, `BTCUSDT`, `ETHUSDT` (edit in [server/config.js](server/config.js)).
+Configured symbols: `PAXGUSDT`, `BTCUSDT`, `ETHUSDT` (edit once in [shared/symbols.js](shared/symbols.js)).
 
 ---
 
@@ -130,18 +150,29 @@ npm run feed:demo
 
 ```
 .
-├── server/                 # Backend — the four-layer hub
-│   ├── config.js           # Single source of truth (symbols, ports, Binance URLs)
-│   ├── feedHandler.js      # Ingestion layer (Binance connection + reconnect)
+├── shared/                 # ISOMORPHIC CORE — runs in Node AND the browser (ESM)
+│   ├── symbols.js          # Symbol pool (single source of truth)
+│   ├── protocol.js         # Wire-protocol constants + throttle policy
 │   ├── normalizer.js       # Normalization layer
-│   ├── hub.js              # Pub-sub broker (golden records + subscriptions)
 │   ├── candleAggregator.js # 1m OHLCV aggregation from trades
+│   ├── hub.js              # Pub-sub broker (golden records + subscriptions)
+│   ├── alertBook.js        # Price-alert registry + trigger-once evaluation
+│   ├── oms.js              # Paper-trading OMS (simulated fills, positions, P&L)
+│   ├── klines.js           # Binance klines -> internal candle mapping
+│   └── emitter.js          # Minimal dependency-free event emitter
+├── server/                 # Backend runtime (Node, ESM)
+│   ├── config.js           # Server config (port, Binance URLs; symbols from /shared)
+│   ├── feedHandler.js      # Ingestion layer (Binance connection + reconnect)
 │   └── index.js            # Express + WebSocket distribution server
-├── scripts/                # Standalone demos (feed, hub)
 ├── frontend/               # React + Vite + Chart.js source
+│   └── src/
+│       ├── feed/           # DataFeed PORT + the two adapters (hub / direct)
+│       ├── components/     # TickerTape, MarketWatch, TicketPanel (Trade/Alert), Blotter, PriceChart
+│       ├── dataSource.js   # Facade: feed factory + REST helpers
+│       └── format.js       # Price/delta/P&L/spread display formatting
+├── scripts/                # Standalone demos (feed, hub)
 ├── public/                 # Built frontend (served by the Node server)
-├── package.json
-└── CLAUDE.md               # Project brief / build phases
+└── package.json
 ```
 
 ---

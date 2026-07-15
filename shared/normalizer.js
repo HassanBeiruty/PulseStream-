@@ -1,15 +1,14 @@
 // ---------------------------------------------------------------------------
-// Normalizer (NORMALIZATION layer)
+// Normalizer (NORMALIZATION layer — SHARED, isomorphic)
 //
-// This module converts raw, upstream provider-specific messages (from Binance)
-// into a unified internal data schema used by the rest of the application.
+// Converts raw, upstream provider-specific messages (from Binance) into the
+// unified internal data schema used by the rest of the application:
 //
-// Unified schema:
 //   { symbol, lastPrice, bestBid, bestAsk, lastTradeTime, source }
 //
-// By doing this, nothing downstream of the normalizer ever touches raw Binance
-// payloads. If we add another data source in the future, we only write a new
-// feed handler and normalizer, leaving the hub and distribution servers untouched.
+// Nothing downstream of the normalizer ever touches raw Binance payloads.
+// Runs in the Node hub (hub mode) and in the browser (direct mode) — the
+// exact same function, so the two modes can never drift apart.
 // ---------------------------------------------------------------------------
 
 /**
@@ -19,7 +18,7 @@
  * @param {object} data - The raw JSON data payload from Binance
  * @returns {object|null} The normalized update object, or null if the stream type is unsupported
  */
-function normalize(stream, data) {
+export function normalize(stream, data) {
   if (!stream || !data) return null;
 
   const symbol = (data.s || '').toUpperCase();
@@ -46,5 +45,3 @@ function normalize(stream, data) {
 
   return null;
 }
-
-module.exports = { normalize };

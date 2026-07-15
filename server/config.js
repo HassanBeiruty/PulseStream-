@@ -1,23 +1,23 @@
 // ---------------------------------------------------------------------------
-// Config (single source of truth)
+// Config (single source of truth for the SERVER runtime)
 //
-// Nothing else in the app should hardcode a symbol or a Binance URL. Every
+// Nothing else in the server should hardcode a symbol or a Binance URL. Every
 // layer reads what it needs from here, so changing the tracked symbols or the
 // upstream endpoints is a one-line edit instead of a search-and-replace.
+//
+// The symbol pool itself lives in /shared/symbols.js because the browser's
+// direct mode needs the exact same list — config re-exposes it for server code.
 // ---------------------------------------------------------------------------
 
-module.exports = {
+import { SYMBOLS } from '../shared/symbols.js';
+
+export default {
   // The fixed pool of symbols the app supports. The runtime watchlist
   // (Phase 5) lets the user subscribe/unsubscribe within this pool.
-  //
-  // PAXGUSDT (PAX Gold) is a gold-backed token — 1 PAXG ≈ 1 troy oz of gold —
-  // so it's how we surface "gold" while staying on Binance's single public
-  // feed. Binance has no silver market, so silver is intentionally absent.
-  // Order here is the display order in the UI; gold is listed first.
-  symbols: ['PAXGUSDT', 'BTCUSDT', 'ETHUSDT'],
+  symbols: SYMBOLS,
 
-  // Port OUR OWN server listens on (Express now; our WebSocket distribution
-  // server will share this process in a later phase).
+  // Port OUR OWN server listens on (Express + the WebSocket distribution
+  // server share this process and port).
   port: Number(process.env.PORT) || 3000,
 
   // Upstream Binance public market-data endpoints — market data only, no API

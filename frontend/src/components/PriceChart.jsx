@@ -36,8 +36,10 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
           {
             label: `${symbol} 1m Candle Close`,
             data,
-            borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.03)',
+            // Neutral series blue (5.0:1 on the panel surface) — the up/down
+            // greens/reds are reserved for directional deltas, not the series.
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.06)',
             fill: true,
             tension: 0.15,
             borderWidth: 2,
@@ -56,10 +58,10 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
           tooltip: {
             mode: 'index',
             intersect: false,
-            backgroundColor: '#121824',
+            backgroundColor: '#10151f',
             titleColor: '#8b9bb4',
-            bodyColor: '#f0f4f9',
-            borderColor: '#212c40',
+            bodyColor: '#e8edf5',
+            borderColor: '#1d2839',
             borderWidth: 1,
             bodyFont: {
               family: "'Outfit', sans-serif",
@@ -72,7 +74,7 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
         scales: {
           x: {
             grid: {
-              color: 'rgba(33, 44, 64, 0.3)',
+              color: 'rgba(29, 40, 57, 0.5)',
             },
             ticks: {
               color: '#8b9bb4',
@@ -85,7 +87,7 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
           },
           y: {
             grid: {
-              color: 'rgba(33, 44, 64, 0.3)',
+              color: 'rgba(29, 40, 57, 0.5)',
             },
             ticks: {
               color: '#8b9bb4',

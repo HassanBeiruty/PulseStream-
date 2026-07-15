@@ -1,35 +1,24 @@
 // ---------------------------------------------------------------------------
-// Data source selector
+// Data source façade
 //
-// The app has two ways of getting market data, chosen at BUILD time:
+// The single import surface App.jsx uses for market data:
 //
-//   1. Server mode (default, local dev): talk to our own Express + WebSocket
-//      distribution server — the full 4-layer hub architecture.
-//   2. Direct mode (VITE_DATA_MODE=direct, used for the static Vercel deploy):
-//      no backend exists, so the browser talks to Binance's public
-//      market-data endpoints directly via DirectFeedSocket, which emulates
-//      the distribution server's protocol client-side.
+//   - createDataFeed() / feedTargetLabel() / DIRECT_MODE  — the DataFeed port
+//     and its build-time adapter selection (see feed/index.js for the port
+//     definition and the two adapters).
+//   - fetchHealth() / fetchHistory()                      — REST concerns.
+//   - symbolLabel()                                       — presentation names.
 //
-// App.jsx only ever calls these three helpers, so it doesn't know or care
-// which mode it's running in.
+// App.jsx never knows which mode it's running in; everything mode-specific is
+// resolved here or in the feed adapters.
 // ---------------------------------------------------------------------------
 
-import { DirectFeedSocket, SYMBOLS, BINANCE_REST_BASE } from './directFeed';
+import { SYMBOLS, symbolLabel } from '../../shared/symbols.js';
+import { klinesToCandles } from '../../shared/klines.js';
+import { BINANCE_REST_BASE } from './feed/directBinanceFeed.js';
+import { createDataFeed, feedTargetLabel, DIRECT_MODE } from './feed/index.js';
 
-export const DIRECT_MODE = import.meta.env.VITE_DATA_MODE === 'direct';
-
-// Friendly display names for tickers that aren't self-explanatory. This is
-// PRESENTATION ONLY: the raw Binance symbol (e.g. "PAXGUSDT") stays the
-// identifier used for subscribe/unsubscribe, history, alerts and record keys.
-// symbolLabel() only changes what the user reads on screen.
-const SYMBOL_LABELS = {
-  PAXGUSDT: 'Gold (PAXG)',
-};
-
-export function symbolLabel(symbol) {
-  if (!symbol) return symbol;
-  return SYMBOL_LABELS[symbol.toUpperCase()] || symbol;
-}
+export { createDataFeed, feedTargetLabel, DIRECT_MODE, symbolLabel };
 
 // Replaces GET /health — returns the configured symbol pool
 export function fetchHealth() {
@@ -40,8 +29,8 @@ export function fetchHealth() {
 }
 
 // Replaces GET /api/history — 100 recent 1m candles for chart backfill.
-// Direct mode does the same Binance klines call and format conversion the
-// server does in server/index.js.
+// Direct mode does the same Binance klines call the server does in
+// server/index.js, mapped through the SAME shared klinesToCandles module.
 export function fetchHistory(symbol) {
   if (!DIRECT_MODE) {
     return fetch(`/api/history?symbol=${symbol}`).then((res) => res.json());
@@ -53,38 +42,5 @@ export function fetchHistory(symbol) {
       if (!res.ok) throw new Error(`Binance API returned status ${res.status}`);
       return res.json();
     })
-    .then((data) => ({
-      symbol: upper,
-      candles: data.map((kline) => ({
-        timestamp: kline[0],
-        open: parseFloat(kline[1]),
-        high: parseFloat(kline[2]),
-        low: parseFloat(kline[3]),
-        close: parseFloat(kline[4]),
-        volume: parseFloat(kline[5]),
-      })),
-    }));
-}
-
-// Replaces `new WebSocket(...)` — returns something that behaves like a
-// WebSocket speaking the distribution server's protocol.
-export function createSocket() {
-  if (DIRECT_MODE) {
-    return new DirectFeedSocket();
-  }
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host =
-    window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
-  return new WebSocket(`${protocol}//${host}`);
-}
-
-// Human-readable description of where createSocket() will connect, for logs
-export function socketTargetLabel() {
-  if (DIRECT_MODE) {
-    return 'Binance public stream (direct mode — no backend)';
-  }
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host =
-    window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
-  return `${protocol}//${host}`;
+    .then((data) => ({ symbol: upper, candles: klinesToCandles(data) }));
 }

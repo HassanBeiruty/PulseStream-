@@ -11,16 +11,16 @@
 //   FEED_DEMO_KILL_AT=5  node ...             force a drop at 5s to test reconnect
 // ---------------------------------------------------------------------------
 
-const { BinanceFeedHandler } = require('../server/feedHandler');
-const { normalize } = require('../server/normalizer');
-const Hub = require('../server/hub');
-const config = require('../server/config');
+import { BinanceFeedHandler } from '../server/feedHandler.js';
+import { normalize } from '../shared/normalizer.js';
+import { Hub } from '../shared/hub.js';
+import config from '../server/config.js';
 
 const runSeconds = Number(process.env.FEED_DEMO_SECONDS) || 0; // 0 = run forever
 const killAt = Number(process.env.FEED_DEMO_KILL_AT) || 0;     // 0 = don't simulate a drop
 
 const feed = new BinanceFeedHandler();
-const hub = new Hub();
+const hub = new Hub(config.symbols);
 
 // Counters to show statistics at the end
 const counts = { raw: 0, normalized: 0 };

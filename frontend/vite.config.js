@@ -8,6 +8,11 @@ export default defineConfig({
     proxy: {
       '/health': 'http://localhost:3000',
     },
+    fs: {
+      // The isomorphic core lives outside the frontend root (../shared) so the
+      // Node server can import the same modules; let the dev server read it.
+      allow: ['..'],
+    },
   },
   build: {
     outDir: '../public',

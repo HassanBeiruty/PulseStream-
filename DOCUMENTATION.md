@@ -77,6 +77,8 @@ These terms appear everywhere in the code. Learn them once here.
 
 ## 4. The four-layer architecture
 
+> **Phase 7 update:** the normalizer, candle aggregator, hub, and alert logic now live in **`/shared`** as isomorphic ESM modules (the server migrated from CommonJS to ESM to import them). The same modules run inside the Node server (hub mode) *and* inside the browser (direct mode on the static Vercel deploy) behind a `DataFeed` port with two adapters — see `frontend/src/feed/`. File paths in the diagrams below predate that move; the layer names, responsibilities, and data flow are unchanged.
+
 The system is built as four layers, each in its own file, each with a real industry name. **Data only flows one direction**, and each layer only knows about the one below it. This separation is the single most important design idea in the project.
 
 ```

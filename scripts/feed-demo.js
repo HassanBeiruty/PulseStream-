@@ -15,7 +15,7 @@
 //   FEED_DEMO_KILL_AT=5  node ...             force a drop at 5s to test reconnect
 // ---------------------------------------------------------------------------
 
-const { BinanceFeedHandler } = require('../server/feedHandler');
+import { BinanceFeedHandler } from '../server/feedHandler.js';
 
 const runSeconds = Number(process.env.FEED_DEMO_SECONDS) || 0; // 0 = run forever
 const killAt = Number(process.env.FEED_DEMO_KILL_AT) || 0; // 0 = don't simulate a drop

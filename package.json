@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Training project: a multiplexed live market-data hub built on Binance public streams.",
-  "type": "commonjs",
+  "type": "module",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

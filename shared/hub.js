@@ -1,40 +1,46 @@
 // ---------------------------------------------------------------------------
-// Hub / pub-sub broker (DISTRIBUTION layer)
+// Hub / pub-sub broker (DISTRIBUTION layer — SHARED, isomorphic)
 //
-// This layer holds the current normalized state per symbol (the "golden record")
-// in memory, and allows internal consumers to subscribe and unsubscribe to specific
-// symbols.
-//
-// When the normalizer processes an upstream message and updates a symbol's fields,
-// the hub merges the update into the golden record and pushes the complete, updated
-// record to all subscribers of that symbol.
+// Holds the current normalized state per symbol (the "golden record") in
+// memory, and allows internal consumers to subscribe and unsubscribe to
+// specific symbols. When the normalizer processes an upstream message and
+// updates a symbol's fields, the hub merges the update into the golden record
+// and pushes the complete, updated record to all subscribers of that symbol.
 //
 // Features:
 //   - Multiplexes a single upstream data stream to multiple internal consumers.
-//   - Decoupled from the upstream data source and the downstream transport protocols.
+//   - Decoupled from the upstream data source and the downstream transports.
+//   - Decoupled from config too: the symbol pool is INJECTED via the
+//     constructor, so the same class runs in Node (hub mode) and in the
+//     browser (direct mode) without touching server config.
 // ---------------------------------------------------------------------------
 
-const config = require('./config');
+/** The empty golden-record shape every consumer can rely on. */
+export function createEmptyRecord(symbol) {
+  return {
+    symbol,
+    lastPrice: null,
+    bestBid: null,
+    bestAsk: null,
+    lastTradeTime: null,
+    activeCandle: null,
+    source: null,
+  };
+}
 
-class Hub {
-  constructor() {
+export class Hub {
+  /**
+   * @param {string[]} [symbols] - symbol pool to pre-initialize golden records for
+   */
+  constructor(symbols = []) {
     // Stores the golden record for each symbol: Map<string, object>
     this.records = new Map();
     // Stores subscription callbacks: Map<string, Set<Function>>
     this.subscriptions = new Map();
 
-    // Pre-initialize golden records for all configured symbols
-    const initialSymbols = config.symbols || [];
-    for (const sym of initialSymbols) {
+    for (const sym of symbols) {
       const upperSym = sym.toUpperCase();
-      this.records.set(upperSym, {
-        symbol: upperSym,
-        lastPrice: null,
-        bestBid: null,
-        bestAsk: null,
-        lastTradeTime: null,
-        source: null,
-      });
+      this.records.set(upperSym, createEmptyRecord(upperSym));
     }
   }
 
@@ -52,14 +58,7 @@ class Hub {
 
     if (!record) {
       // If we encounter a new symbol outside the pre-configured ones, initialize it
-      record = {
-        symbol: sym,
-        lastPrice: null,
-        bestBid: null,
-        bestAsk: null,
-        lastTradeTime: null,
-        source: null,
-      };
+      record = createEmptyRecord(sym);
       this.records.set(sym, record);
     }
 
@@ -129,5 +128,3 @@ class Hub {
     return record ? { ...record } : null;
   }
 }
-
-module.exports = Hub;

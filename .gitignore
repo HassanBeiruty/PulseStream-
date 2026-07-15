@@ -12,3 +12,6 @@ frontend/node_modules/
 
 .vercel
 .env*
+
+# Local working notes (kept out of the public repo)
+CLAUDE.md

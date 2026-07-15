@@ -1,15 +1,17 @@
 // ---------------------------------------------------------------------------
-// Candle Aggregator (AGGREGATION layer)
+// Candle Aggregator (AGGREGATION layer — SHARED, isomorphic)
 //
-// This module aggregates raw trade updates into 1-minute OHLCV (Open, High,
-// Low, Close, Volume) candles in memory.
+// Aggregates raw trade updates into 1-minute OHLCV (Open, High, Low, Close,
+// Volume) candles in memory.
 //
 // When a trade tick is received, it determines which 1-minute interval the
 // trade belongs to. If it's a new minute, it starts a new candle; if it is the
 // current minute, it updates the existing candle's High, Low, Close, and Volume.
+//
+// Same class runs server-side (hub mode) and in the browser (direct mode).
 // ---------------------------------------------------------------------------
 
-class CandleAggregator {
+export class CandleAggregator {
   constructor() {
     // Map of symbol -> activeCandle object
     this.candles = new Map();
@@ -19,7 +21,7 @@ class CandleAggregator {
    * Updates the active candle for a symbol using a trade update.
    *
    * @param {object} trade - Normalized trade object containing symbol, lastPrice, lastTradeTime, quantity
-   * @returns {object} The updated active candle for the symbol
+   * @returns {object|null} A copy of the updated active candle for the symbol
    */
   update(trade) {
     if (!trade || !trade.symbol || trade.lastPrice === undefined || !trade.lastTradeTime) {
@@ -29,7 +31,7 @@ class CandleAggregator {
     const sym = trade.symbol.toUpperCase();
     const price = trade.lastPrice;
     const qty = trade.quantity || 0;
-    
+
     // Determine the 1-minute bucket timestamp (milliseconds)
     const minuteStart = Math.floor(trade.lastTradeTime / 60000) * 60000;
 
@@ -68,5 +70,3 @@ class CandleAggregator {
     return active ? { ...active } : null;
   }
 }
-
-module.exports = CandleAggregator;

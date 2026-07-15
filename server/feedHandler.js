@@ -21,11 +21,11 @@
 //   'error'        (Error)              socket or parse error (non-fatal)
 // ---------------------------------------------------------------------------
 
-const EventEmitter = require('events');
-const WebSocket = require('ws');
-const config = require('./config');
+import { EventEmitter } from 'events';
+import WebSocket from 'ws';
+import config from './config.js';
 
-class BinanceFeedHandler extends EventEmitter {
+export class BinanceFeedHandler extends EventEmitter {
   /**
    * @param {object}   [opts]
    * @param {string[]} [opts.symbols]          symbols to subscribe to (default: config.symbols)
@@ -187,5 +187,3 @@ class BinanceFeedHandler extends EventEmitter {
     console.log('[feed] stopped');
   }
 }
-
-module.exports = { BinanceFeedHandler };
