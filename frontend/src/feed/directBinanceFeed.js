@@ -22,6 +22,7 @@ import { CandleAggregator } from '../../../shared/candleAggregator.js';
 import { VwapCalculator } from '../../../shared/analytics.js';
 import { Hub } from '../../../shared/hub.js';
 import { AlertBook } from '../../../shared/alertBook.js';
+import { OrderBookManager } from '../../../shared/orderBook.js';
 import { THROTTLE_MS } from '../../../shared/protocol.js';
 
 // Binance's dedicated public market-data endpoints — no API key, CORS-enabled,
@@ -47,6 +48,21 @@ export class DirectBinanceFeed {
     this.candleAggregator = new CandleAggregator();
     this.vwap = new VwapCalculator();
     this.alerts = new AlertBook();
+
+    // L2 order books: same shared sync engine as the server, browser fetch
+    this.pendingBooks = new Map(); // symbol -> latest book view since last flush
+    this.bookManager = new OrderBookManager({
+      fetchSnapshot: async (symbol) => {
+        const res = await fetch(`${BINANCE_REST_BASE}/depth?symbol=${symbol}&limit=100`);
+        if (!res.ok) throw new Error(`depth snapshot returned ${res.status}`);
+        return res.json();
+      },
+      onBook: (view) => {
+        if (this.hubSubscriptions.has(view.symbol)) {
+          this.pendingBooks.set(view.symbol, view);
+        }
+      },
+    });
 
     // Per-consumer state (this adapter IS the "client connection")
     this.hubSubscriptions = new Map(); // symbol -> hub unsubscribe fn
@@ -141,6 +157,7 @@ export class DirectBinanceFeed {
         `${s.toLowerCase()}@trade`,
         `${s.toLowerCase()}@bookTicker`,
         `${s.toLowerCase()}@miniTicker`,
+        `${s.toLowerCase()}@depth`,
       ])
       .join('/');
 
@@ -225,6 +242,12 @@ export class DirectBinanceFeed {
   // --- pipeline: normalizer -> candle aggregator -> hub ----------------------
 
   ingest(stream, data) {
+    // @depth diffs bypass the normalizer: they feed the order-book engine raw
+    if (stream.endsWith('@depth')) {
+      if (data && data.s) this.bookManager.handleDiff(data.s, data);
+      return;
+    }
+
     const update = normalize(stream, data);
     if (!update) return;
 
@@ -244,11 +267,18 @@ export class DirectBinanceFeed {
   }
 
   flush() {
-    if (this.pendingUpdates.size === 0) return;
-    for (const record of this.pendingUpdates.values()) {
-      this.emitter.emit('update', record);
+    if (this.pendingUpdates.size > 0) {
+      for (const record of this.pendingUpdates.values()) {
+        this.emitter.emit('update', record);
+      }
+      this.pendingUpdates.clear();
     }
-    this.pendingUpdates.clear();
+    if (this.pendingBooks.size > 0) {
+      for (const view of this.pendingBooks.values()) {
+        this.emitter.emit('book', view);
+      }
+      this.pendingBooks.clear();
+    }
   }
 
   // --- port methods (mirror the server's per-client handler) -----------------
@@ -280,6 +310,11 @@ export class DirectBinanceFeed {
     if (initialRecord) {
       this.emitter.emit('update', initialRecord);
     }
+    // And the current L2 book, if its engine is already synced
+    const book = this.bookManager.books.get(sym);
+    if (book && book.synced) {
+      this.bookManager.publish(book);
+    }
   }
 
   unsubscribe(symbol) {
@@ -289,6 +324,7 @@ export class DirectBinanceFeed {
     unsubscribe();
     this.hubSubscriptions.delete(sym);
     this.pendingUpdates.delete(sym);
+    this.pendingBooks.delete(sym);
     this.alerts.removeForSymbol(sym);
   }
 

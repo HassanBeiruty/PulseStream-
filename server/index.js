@@ -27,6 +27,7 @@ import { normalize } from '../shared/normalizer.js';
 import { Hub } from '../shared/hub.js';
 import { CandleAggregator } from '../shared/candleAggregator.js';
 import { VwapCalculator } from '../shared/analytics.js';
+import { OrderBookManager } from '../shared/orderBook.js';
 import { AlertBook } from '../shared/alertBook.js';
 import { klinesToCandles } from '../shared/klines.js';
 import { ClientMsg, ServerMsg, THROTTLE_MS } from '../shared/protocol.js';
@@ -45,6 +46,22 @@ app.use(express.static(publicDir));
 const hub = new Hub(config.symbols);
 const candleAggregator = new CandleAggregator();
 const vwap = new VwapCalculator();
+
+// L2 order books (Phase 9): shared sync engine + REST snapshot injection.
+// Latest per-symbol views are versioned so each client's throttled flush can
+// send only books that actually changed.
+const latestBooks = new Map(); // symbol -> view (+ version)
+let bookVersion = 0;
+const bookManager = new OrderBookManager({
+  fetchSnapshot: async (symbol) => {
+    const res = await fetch(`${config.binance.restBase}/depth?symbol=${symbol}&limit=100`);
+    if (!res.ok) throw new Error(`depth snapshot returned ${res.status}`);
+    return res.json();
+  },
+  onBook: (view) => {
+    latestBooks.set(view.symbol, { ...view, version: ++bookVersion });
+  },
+});
 
 app.get('/health', (req, res) => {
   const records = {};
@@ -83,7 +100,13 @@ app.get('/api/history', async (req, res) => {
 const feed = new BinanceFeedHandler();
 
 // Connect Feed Handler -> Normalizer -> Candle Aggregator -> Hub
+// (@depth diffs bypass the normalizer: they feed the order-book engine raw)
 feed.on('raw', ({ stream, data }) => {
+  if (stream.endsWith('@depth')) {
+    if (data && data.s) bookManager.handleDiff(data.s, data);
+    return;
+  }
+
   const update = normalize(stream, data);
   if (update) {
     // Only @trade updates carry a `quantity`; @bookTicker updates don't. So the
@@ -139,6 +162,11 @@ feed.on('close', ({ code }) => {
   broadcast({ type: ServerMsg.FEED_STATUS, status: 'reconnecting' });
 });
 
+feed.on('error', (err) => {
+  // Non-fatal by design: malformed frames / socket errors are logged, never thrown
+  console.error(`[feed] non-fatal error: ${err.message}`);
+});
+
 // Start the ingestion layer
 feed.start();
 
@@ -159,6 +187,8 @@ wss.on('connection', (ws) => {
   const clientSubscriptions = new Map();
   // Buffer the latest updates to send during the next throttle flush: Map<string, object>
   const pendingUpdates = new Map();
+  // Book versions already sent to THIS client (send only what changed)
+  const sentBookVersions = new Map();
   // Price alerts registered by this client connection (shared AlertBook —
   // identical semantics to the direct-mode adapter, because it IS the same code)
   const alerts = new AlertBook();
@@ -172,6 +202,14 @@ wss.on('connection', (ws) => {
         send({ type: ServerMsg.UPDATE, data: record });
       }
       pendingUpdates.clear();
+    }
+    // L2 books: relay the latest view per subscribed symbol, only on change
+    for (const symbol of clientSubscriptions.keys()) {
+      const view = latestBooks.get(symbol);
+      if (view && sentBookVersions.get(symbol) !== view.version) {
+        send({ type: ServerMsg.BOOK, data: view });
+        sentBookVersions.set(symbol, view.version);
+      }
     }
   }, THROTTLE_MS);
 
@@ -234,6 +272,12 @@ wss.on('connection', (ws) => {
       if (initialRecord) {
         send({ type: ServerMsg.UPDATE, data: initialRecord });
       }
+      // And the current L2 book snapshot view, if the engine is synced
+      const bookView = latestBooks.get(symbol);
+      if (bookView) {
+        send({ type: ServerMsg.BOOK, data: bookView });
+        sentBookVersions.set(symbol, bookView.version);
+      }
     } else if (type === ClientMsg.UNSUBSCRIBE) {
       const unsubscribe = clientSubscriptions.get(symbol);
       if (unsubscribe) {
@@ -241,6 +285,7 @@ wss.on('connection', (ws) => {
         unsubscribe();
         clientSubscriptions.delete(symbol);
         pendingUpdates.delete(symbol);
+        sentBookVersions.delete(symbol);
 
         // Cancel alerts for this symbol when unsubscribed from watchlist
         alerts.removeForSymbol(symbol);

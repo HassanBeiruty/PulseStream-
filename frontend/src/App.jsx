@@ -61,6 +61,7 @@ function FlashPrice({ price }) {
 function App() {
   const [symbols, setSymbols] = useState([]);
   const [records, setRecords] = useState({});
+  const [books, setBooks] = useState({}); // symbol -> L2 depth view
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [logs, setLogs] = useState([]);
   
@@ -272,6 +273,10 @@ function App() {
           logMessage('SYSTEM', `Re-registering alert for ${alert.symbol} at ${alert.condition} ${alert.value}`);
           feed.setAlert(alert);
         });
+      });
+
+      feed.on('book', (view) => {
+        setBooks((prev) => ({ ...prev, [view.symbol]: view }));
       });
 
       feed.on('feedStatus', ({ status }) => {
@@ -647,6 +652,7 @@ function App() {
             onToggle={toggleWatchlist}
           />
           <TicketPanel
+            book={selectedSymbol ? books[selectedSymbol] : null}
             trade={{
               selectedSymbol: selectedSymbol && watchlist.includes(selectedSymbol) ? selectedSymbol : '',
               record: selectedRecord,

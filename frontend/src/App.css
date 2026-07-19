@@ -905,6 +905,88 @@ header h1 .h1-terminal {
 .cols-fill { grid-template-columns: 1fr 1.1fr 0.7fr 0.9fr 1fr 0.8fr; }
 .cols-alert { grid-template-columns: 1.2fr 1fr 1fr 60px; }
 
+/* --- L2 depth ladder ----------------------------------------------------------------- */
+
+.ladder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0.8rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  overflow-y: auto;
+}
+
+.ladder-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0 0.3rem;
+}
+
+.ladder-side { display: flex; flex-direction: column; }
+
+.ladder-row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.11rem 0.2rem;
+  line-height: 1.35;
+}
+
+/* Size bar behind each level, anchored right like real ladders */
+.ladder-bar {
+  position: absolute;
+  right: 0;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.ladder-bar.bid { background: rgba(16, 185, 129, 0.13); }
+.ladder-bar.ask { background: rgba(239, 68, 68, 0.13); }
+
+.ladder-price { position: relative; }
+.ladder-qty { position: relative; color: var(--text-muted); }
+
+.ladder-spread {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.2rem;
+  margin: 0.15rem 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.ladder-foot {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.35rem;
+  margin-top: auto;
+  color: var(--text-faint);
+  font-size: 0.66rem;
+}
+
+.ladder-foot b { font-weight: 700; }
+
+.ladder-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 1rem;
+}
+
 /* --- Toasts ------------------------------------------------------------------------- */
 
 .toast-container {

@@ -25,6 +25,7 @@
 //
 // Events: 'open' | 'close' | 'error'
 //         'update'         (goldenRecord)
+//         'book'           (L2 view: { symbol, bids, asks, spread, mid, imbalance, ... })
 //         'feedStatus'     ({ status, attempt?, delay? })
 //         'alertConfirmed' | 'alertRemoved' | 'alertTriggered'  (data)
 // ---------------------------------------------------------------------------

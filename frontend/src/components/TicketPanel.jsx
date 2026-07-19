@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import TradeTicket from './TradeTicket';
 import AlertTicket from './AlertTicket';
+import DepthLadder from './DepthLadder';
 
-// Right-column ticket panel with two tabs: the paper-trading order ticket and
-// the price-alert ticket. Both are "tickets" in terminal vocabulary — an entry
-// form that produces an instruction (a simulated order / an alert).
-function TicketPanel({ trade, alert }) {
+// Right-column ticket panel: the paper-trading order ticket, the live L2
+// depth ladder for the selected instrument, and the price-alert ticket.
+function TicketPanel({ trade, alert, book }) {
   const [tab, setTab] = useState('trade');
 
   return (
@@ -19,6 +19,13 @@ function TicketPanel({ trade, alert }) {
           Trade
         </button>
         <button
+          className={`blotter-tab ${tab === 'book' ? 'active' : ''}`}
+          onClick={() => setTab('book')}
+          type="button"
+        >
+          Book
+        </button>
+        <button
           className={`blotter-tab ${tab === 'alert' ? 'active' : ''}`}
           onClick={() => setTab('alert')}
           type="button"
@@ -26,7 +33,9 @@ function TicketPanel({ trade, alert }) {
           Alert
         </button>
       </div>
-      {tab === 'trade' ? <TradeTicket {...trade} /> : <AlertTicket {...alert} />}
+      {tab === 'trade' && <TradeTicket {...trade} />}
+      {tab === 'book' && <DepthLadder book={book} />}
+      {tab === 'alert' && <AlertTicket {...alert} />}
     </section>
   );
 }

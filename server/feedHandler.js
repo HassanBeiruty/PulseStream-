@@ -29,6 +29,7 @@ export class BinanceFeedHandler extends EventEmitter {
   /**
    * @param {object}   [opts]
    * @param {string[]} [opts.symbols]          symbols to subscribe to (default: config.symbols)
+   * @param {string}   [opts.wsBase]           upstream WS base URL (default: config; injectable for tests)
    * @param {number}   [opts.baseDelayMs]      first backoff delay (default 1000)
    * @param {number}   [opts.maxDelayMs]       backoff cap (default 30000)
    * @param {number}   [opts.stalenessMs]      silence before we force a reconnect (default 15000)
@@ -36,6 +37,7 @@ export class BinanceFeedHandler extends EventEmitter {
   constructor(opts = {}) {
     super();
     this.symbols = opts.symbols || config.symbols;
+    this.wsBase = opts.wsBase || config.binance.wsBase;
     this.baseDelayMs = opts.baseDelayMs ?? 1000;
     this.maxDelayMs = opts.maxDelayMs ?? 30000;
     this.stalenessMs = opts.stalenessMs ?? 15000;
@@ -48,16 +50,24 @@ export class BinanceFeedHandler extends EventEmitter {
     this.stopped = false; // set by stop(); prevents auto-reconnect on intentional close
   }
 
+  // EventEmitter THROWS on an unlistened 'error' event — which would let one
+  // malformed frame kill the process. Only emit when someone is listening.
+  emitError(err) {
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', err);
+    }
+  }
+
   // Build the combined-stream URL. Binance wants lowercase stream names:
   //   wss://.../stream?streams=btcusdt@trade/btcusdt@bookTicker/ethusdt@trade/...
   buildUrl() {
     const streams = this.symbols
       .flatMap((sym) => {
         const s = sym.toLowerCase();
-        return [`${s}@trade`, `${s}@bookTicker`, `${s}@miniTicker`];
+        return [`${s}@trade`, `${s}@bookTicker`, `${s}@miniTicker`, `${s}@depth`];
       })
       .join('/');
-    return `${config.binance.wsBase}?streams=${streams}`;
+    return `${this.wsBase}?streams=${streams}`;
   }
 
   start() {
@@ -88,7 +98,7 @@ export class BinanceFeedHandler extends EventEmitter {
         msg = JSON.parse(buf.toString());
       } catch (err) {
         // Malformed frame — log and skip; never let one bad frame kill the feed.
-        this.emit('error', err);
+        this.emitError(err);
         return;
       }
       // Combined-stream frames look like { stream, data }. Anything else
@@ -102,7 +112,7 @@ export class BinanceFeedHandler extends EventEmitter {
       // 'error' is always followed by 'close', so we only LOG here and let the
       // 'close' handler own the reconnect scheduling (avoids double reconnects).
       console.error(`[feed] socket error: ${err.message}`);
-      this.emit('error', err);
+      this.emitError(err);
     });
 
     this.ws.on('close', (code, reasonBuf) => {

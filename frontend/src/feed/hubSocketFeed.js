@@ -46,6 +46,9 @@ export class HubSocketFeed {
         case ServerMsg.UPDATE:
           if (msg.data) this.emitter.emit('update', msg.data);
           break;
+        case ServerMsg.BOOK:
+          if (msg.data) this.emitter.emit('book', msg.data);
+          break;
         case ServerMsg.FEED_STATUS:
           this.emitter.emit('feedStatus', {
             status: msg.status,

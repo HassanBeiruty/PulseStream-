@@ -26,6 +26,7 @@ export const ClientMsg = {
 // Server -> client message types
 export const ServerMsg = {
   UPDATE: 'UPDATE',
+  BOOK: 'BOOK', // L2 depth ladder view (top-N bids/asks + spread/mid/imbalance)
   FEED_STATUS: 'FEED_STATUS',
   ALERT_CONFIRMED: 'ALERT_CONFIRMED',
   ALERT_REMOVED: 'ALERT_REMOVED',

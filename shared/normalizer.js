@@ -11,22 +11,24 @@
 // exact same function, so the two modes can never drift apart.
 // ---------------------------------------------------------------------------
 
+import { isValidTrade, isValidBookTicker, isValidMiniTicker } from './schema.js';
+
 /**
- * Normalizes raw messages from Binance streams.
+ * Normalizes raw messages from Binance streams. Every payload is schema-
+ * validated at this boundary — a malformed frame returns null instead of
+ * seeding NaN into the golden records downstream.
  *
  * @param {string} stream - The name of the upstream stream (e.g. "btcusdt@trade")
  * @param {object} data - The raw JSON data payload from Binance
- * @returns {object|null} The normalized update object, or null if the stream type is unsupported
+ * @returns {object|null} The normalized update object, or null if unsupported/invalid
  */
 export function normalize(stream, data) {
   if (!stream || !data) return null;
 
-  const symbol = (data.s || '').toUpperCase();
-  if (!symbol) return null;
-
   if (stream.endsWith('@trade')) {
+    if (!isValidTrade(data)) return null;
     return {
-      symbol,
+      symbol: data.s.toUpperCase(),
       lastPrice: parseFloat(data.p),
       lastTradeTime: data.T,
       quantity: parseFloat(data.q),
@@ -35,8 +37,9 @@ export function normalize(stream, data) {
   }
 
   if (stream.endsWith('@bookTicker')) {
+    if (!isValidBookTicker(data)) return null;
     return {
-      symbol,
+      symbol: data.s.toUpperCase(),
       bestBid: parseFloat(data.b),
       bestAsk: parseFloat(data.a),
       source: 'binance',
@@ -46,8 +49,9 @@ export function normalize(stream, data) {
   // 24h rolling-window stats (open/high/low/base volume). Deliberately does
   // NOT set lastPrice — the trade stream owns that field.
   if (stream.endsWith('@miniTicker')) {
+    if (!isValidMiniTicker(data)) return null;
     return {
-      symbol,
+      symbol: data.s.toUpperCase(),
       open24h: parseFloat(data.o),
       high24h: parseFloat(data.h),
       low24h: parseFloat(data.l),

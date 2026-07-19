@@ -56,6 +56,7 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 - **Market watch** — two-line live rows (last / 24h Δ / bid × ask) with tick-direction flashes, staleness badges, and Watch/× controls that drive **real subscribe/unsubscribe** messages.
 - **Instrument bar** — big live last price, 24h Δ, bid/ask, **spread in absolute and basis points**, **session VWAP**, 24h high/low/volume, and the live self-built 1m OHLCV bucket.
 - **Live chart** — Chart.js with a **session VWAP benchmark overlay**, backfilled from REST klines on load, then continued from self-built candles.
+- **L2 depth ladder** — live top-10 bids/asks with size bars, spread in bps, mid, and **order-book imbalance**, maintained by a self-built snapshot + sequenced-delta sync engine ([shared/orderBook.js](shared/orderBook.js)).
 - **Alert ticket** — order-ticket-style panel (▲ Above / ▼ Below sides); triggered alerts toast in-page.
 - **Blotter** — bottom tabs: protocol console, paper positions/orders/fills, and active alerts.
 
@@ -67,14 +68,16 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 
 **Data plumbing**
 - **Live prices pushed over WebSocket**, never polled; UI updates **throttled to ~300ms** per symbol.
-- **Three upstream streams per symbol** — `@trade` (prints), `@bookTicker` (L1 quotes), `@miniTicker` (24h rolling stats) — merged into one golden record.
+- **Four upstream streams per symbol** — `@trade` (prints), `@bookTicker` (L1 quotes), `@miniTicker` (24h stats) merged into one golden record, plus `@depth` diffs feeding the L2 order-book engine (Binance's documented sync algorithm: REST snapshot + `U`/`u` sequence validation, gap detection, automatic resync).
+- **Runtime schema validation at the feed boundary** ([shared/schema.js](shared/schema.js)) — malformed exchange frames are rejected before they can seed NaN into golden records.
 - **Session VWAP** computed inside the ingestion pipeline from real trades ([shared/analytics.js](shared/analytics.js)) — never from throttled UI updates.
 - **Connection status** — `live` / `reconnecting` / `stale` (stale = connection open but no fresh data for >10s).
 - **Self-built 1m OHLCV candles** — aggregated from the trade stream.
 - **Reconnect with exponential backoff + full jitter** — same policy in both runtimes.
 
 **Engineering**
-- **Unit-tested shared core** — [Vitest](tests/) covers the normalizer, candle aggregator, hub pub-sub, alert book, VWAP, klines mapping, and the full OMS lifecycle (fills, flips through zero, fees, persistence).
+- **Unit-tested shared core** — [Vitest](tests/) (51 tests) covers the normalizer, candle aggregator, hub pub-sub, alert book, VWAP, klines mapping, order-book sync rules (buffering, gaps, resync), schema validation, and the full OMS lifecycle (fills, flips through zero, fees, persistence).
+- **Mock-exchange integration test** — runs the real feed handler against a local WebSocket server standing in for Binance, proving message forwarding, reconnect-with-backoff after drops, and the staleness watchdog forcing recovery on silent connections.
 - **CI on every push/PR** — GitHub Actions runs tests, lint, and both build modes ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 - **Serverless backfill API** — [api/history.js](api/history.js) proxies Binance klines behind Vercel's edge CDN (`s-maxage` + `stale-while-revalidate`), with a direct-to-Binance fallback in the browser.
 
@@ -167,6 +170,8 @@ npm run feed:demo
 │   ├── hub.js              # Pub-sub broker (golden records + subscriptions)
 │   ├── alertBook.js        # Price-alert registry + trigger-once evaluation
 │   ├── oms.js              # Paper-trading OMS (simulated fills, positions, P&L)
+│   ├── orderBook.js        # L2 book: snapshot + sequenced-delta sync, gap resync
+│   ├── schema.js           # Feed-boundary validation of raw exchange payloads
 │   ├── analytics.js        # Session VWAP (volume-weighted average price)
 │   ├── klines.js           # Binance klines -> internal candle mapping
 │   └── emitter.js          # Minimal dependency-free event emitter
