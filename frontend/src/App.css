@@ -20,21 +20,22 @@
 :root {
   color-scheme: dark;
 
-  --bg-color: #0a0e14;        /* page plane */
-  --panel-color: #10151f;     /* chart surface / panels */
-  --panel-deep: #0c1017;      /* tape, blotter body, inputs */
-  --panel-hover: #161d2b;
-  --border-color: #1d2839;
-  --border-soft: rgba(255, 255, 255, 0.06);
+  /* TradingView-Pro palette (approved via design mockup) */
+  --bg-color: #131722;        /* page plane — TV graphite */
+  --panel-color: #1e222d;     /* chart surface / panels */
+  --panel-deep: #171b26;      /* tape, blotter body, inputs */
+  --panel-hover: #262b38;
+  --border-color: #2a2e39;
+  --border-soft: rgba(250, 250, 250, 0.05);
 
-  --text-color: #e8edf5;
-  --text-muted: #8b9bb4;
-  --text-faint: #5b6a82;
+  --text-color: #d1d4dc;
+  --text-muted: #787b86;
+  --text-faint: #5d606b;
 
-  --color-up: #10b981;        /* 7.2:1 on panel */
-  --color-down: #ef4444;      /* 4.9:1 on panel */
-  --color-warning: #f59e0b;   /* 8.5:1 on panel */
-  --color-info: #3b82f6;      /* 5.0:1 on panel */
+  --color-up: #089981;        /* TV teal-green */
+  --color-down: #f23645;      /* TV red */
+  --color-warning: #f59e0b;
+  --color-info: #2962ff;      /* TV action blue */
 
   --font-sans: 'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -77,8 +78,8 @@ header {
 .logo-icon {
   width: 1.6rem;
   height: 1.6rem;
-  background: linear-gradient(135deg, var(--color-info), var(--color-up));
-  border-radius: 6px;
+  background: var(--color-info); /* solid TV blue, per mockup */
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,9 +88,9 @@ header {
 }
 
 @keyframes logo-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
-  70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(8, 153, 129, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(8, 153, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(8, 153, 129, 0); }
 }
 
 header h1 {
@@ -157,8 +158,8 @@ header h1 .h1-terminal {
 .status-badge.live,
 .status-badge.connected {
   color: var(--color-up);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(8, 153, 129, 0.25);
+  background: rgba(8, 153, 129, 0.06);
 }
 
 .status-badge.connecting,
@@ -171,8 +172,8 @@ header h1 .h1-terminal {
 
 .status-badge.disconnected {
   color: var(--color-down);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(242, 54, 69, 0.25);
+  background: rgba(242, 54, 69, 0.06);
 }
 
 /* --- Ticker tape ------------------------------------------------------------- */
@@ -256,7 +257,7 @@ header h1 .h1-terminal {
 .panel {
   background: var(--panel-color);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px; /* TV chrome: tighter radii */
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -426,7 +427,7 @@ header h1 .h1-terminal {
 .mw-row:hover { background: var(--panel-hover); }
 
 .mw-row.selected {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(41, 98, 255, 0.08);
   box-shadow: inset 2px 0 0 var(--color-info);
 }
 
@@ -499,13 +500,13 @@ header h1 .h1-terminal {
   letter-spacing: 0.05em;
   padding: 0 0.6rem;
   color: var(--color-info);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(41, 98, 255, 0.4);
 }
 
 .mw-toggle:hover { border-color: var(--text-muted); color: var(--text-color); }
 
 .mw-toggle.unwatched:hover {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(41, 98, 255, 0.12);
   color: var(--color-info);
   border-color: var(--color-info);
 }
@@ -536,12 +537,12 @@ header h1 .h1-terminal {
 .row-flash-down { animation: row-down 0.7s ease-out; }
 
 @keyframes row-up {
-  0% { background: rgba(16, 185, 129, 0.14); }
+  0% { background: rgba(8, 153, 129, 0.14); }
   100% { background: transparent; }
 }
 
 @keyframes row-down {
-  0% { background: rgba(239, 68, 68, 0.14); }
+  0% { background: rgba(242, 54, 69, 0.14); }
   100% { background: transparent; }
 }
 
@@ -603,13 +604,13 @@ header h1 .h1-terminal {
 }
 
 .side-btn.above.active {
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(8, 153, 129, 0.12);
   border-color: var(--color-up);
   color: var(--color-up);
 }
 
 .side-btn.below.active {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(242, 54, 69, 0.12);
   border-color: var(--color-down);
   color: var(--color-down);
 }
@@ -724,7 +725,7 @@ header h1 .h1-terminal {
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 6px 6px;
 }
 
 .log-entry { line-height: 1.35; color: var(--text-muted); }
@@ -789,13 +790,13 @@ header h1 .h1-terminal {
 
 /* BUY (green) / SELL (red) — same visual language as Above/Below */
 .side-btn.buy.active {
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(8, 153, 129, 0.12);
   border-color: var(--color-up);
   color: var(--color-up);
 }
 
 .side-btn.sell.active {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(242, 54, 69, 0.12);
   border-color: var(--color-down);
   color: var(--color-down);
 }
@@ -817,7 +818,7 @@ header h1 .h1-terminal {
 }
 
 .type-btn.active {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(41, 98, 255, 0.12);
   border-color: var(--color-info);
   color: var(--color-info);
 }
@@ -833,8 +834,8 @@ header h1 .h1-terminal {
 }
 
 /* Header P&L chip — direction is also carried by the +/− sign */
-.pnl-chip.dir-up { color: var(--color-up); border-color: rgba(16, 185, 129, 0.35); }
-.pnl-chip.dir-down { color: var(--color-down); border-color: rgba(239, 68, 68, 0.35); }
+.pnl-chip.dir-up { color: var(--color-up); border-color: rgba(8, 153, 129, 0.35); }
+.pnl-chip.dir-down { color: var(--color-down); border-color: rgba(242, 54, 69, 0.35); }
 
 /* LONG / SHORT chips in the positions blotter */
 .pos-chip {
@@ -848,14 +849,14 @@ header h1 .h1-terminal {
 
 .pos-chip.long {
   color: var(--color-up);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(8, 153, 129, 0.3);
+  background: rgba(8, 153, 129, 0.08);
 }
 
 .pos-chip.short {
   color: var(--color-down);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(242, 54, 69, 0.3);
+  background: rgba(242, 54, 69, 0.08);
 }
 
 /* Generic blotter tables (positions / orders / fills / alerts) */
@@ -864,7 +865,7 @@ header h1 .h1-terminal {
   min-height: 0;
   overflow-y: auto;
   background: var(--panel-deep);
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 6px 6px;
 }
 
 .bl-head,
@@ -965,8 +966,8 @@ header h1 .h1-terminal {
   pointer-events: none;
 }
 
-.ladder-bar.bid { background: rgba(16, 185, 129, 0.13); }
-.ladder-bar.ask { background: rgba(239, 68, 68, 0.13); }
+.ladder-bar.bid { background: rgba(8, 153, 129, 0.13); }
+.ladder-bar.ask { background: rgba(242, 54, 69, 0.13); }
 
 .ladder-price { position: relative; }
 .ladder-qty { position: relative; color: var(--text-muted); }

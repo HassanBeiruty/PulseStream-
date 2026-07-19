@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-chart-financial": "^0.2.1",
+    "date-fns": "^4.4.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

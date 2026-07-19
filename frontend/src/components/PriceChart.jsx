@@ -1,8 +1,26 @@
 import React, { useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
+import 'chartjs-adapter-date-fns';
+import {
+  CandlestickController,
+  CandlestickElement,
+  OhlcController,
+  OhlcElement,
+} from 'chartjs-chart-financial';
 
-Chart.register(...registerables);
+Chart.register(...registerables, CandlestickController, CandlestickElement, OhlcController, OhlcElement);
 
+// TradingView palette (matches App.css tokens — Chart.js can't read CSS vars)
+const UP = '#089981';
+const DOWN = '#f23645';
+const NEUTRAL = '#787b86';
+const GRID = 'rgba(42, 46, 57, 0.55)';
+const CANDLE_COLORS = { up: UP, down: DOWN, unchanged: NEUTRAL };
+
+const toPoint = (c) => ({ x: c.timestamp, o: c.open, h: c.high, l: c.low, c: c.close });
+
+// Real candlesticks from the SELF-BUILT 1m OHLCV candles (REST backfill +
+// IndexedDB history + live aggregation) — not a provider widget.
 function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
   const canvasRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -12,49 +30,34 @@ function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
   const vwapRef = useRef(sessionVwap);
   vwapRef.current = sessionVwap;
 
-  // 1. Initialize and update chart on new historical data (e.g., symbol change)
+  // 1. (Re)build the chart when the symbol or backfill changes
   useEffect(() => {
     if (!historicalCandles || historicalCandles.length === 0) return;
 
-    // Cache the candles locally in a mutable ref
     candlesRef.current = [...historicalCandles];
-
     const ctx = canvasRef.current.getContext('2d');
-
-    // Destroy existing chart if it exists
     if (chartInstanceRef.current) {
       chartInstanceRef.current.destroy();
     }
 
-    const labels = candlesRef.current.map((c) =>
-      new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    );
-    const data = candlesRef.current.map((c) => c.close);
-
-    // Create the Chart.js instance with premium styling
     chartInstanceRef.current = new Chart(ctx, {
-      type: 'line',
+      type: 'candlestick',
       data: {
-        labels,
         datasets: [
           {
-            label: `${symbol} 1m Close`,
-            data,
-            // Neutral series blue (5.0:1 on the panel surface) — the up/down
-            // greens/reds are reserved for directional deltas, not the series.
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.06)',
-            fill: true,
-            tension: 0.15,
-            borderWidth: 2,
-            pointRadius: 0, // hide points for a clean look
-            pointHoverRadius: 4,
+            label: `${symbol} 1m`,
+            data: candlesRef.current.map(toPoint),
+            // chartjs-chart-financial reads these {up,down,unchanged} maps
+            color: CANDLE_COLORS,
+            borderColor: CANDLE_COLORS,
+            backgroundColor: CANDLE_COLORS,
+            borderColors: CANDLE_COLORS,
+            backgroundColors: CANDLE_COLORS,
           },
           {
+            type: 'line',
             label: 'Session VWAP',
-            // Horizontal benchmark line at the live session VWAP (violet —
-            // distinct from the price series, not a status color)
-            data: labels.map(() => vwapRef.current ?? null),
+            data: candlesRef.current.map((c) => ({ x: c.timestamp, y: vwapRef.current ?? null })),
             borderColor: '#9085e9',
             borderDash: [6, 4],
             borderWidth: 1.5,
@@ -68,14 +71,12 @@ function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          // Two series on one axis -> the legend is required so identity is
-          // never color-alone
           legend: {
             display: true,
             position: 'top',
             align: 'end',
             labels: {
-              color: '#8b9bb4',
+              color: NEUTRAL,
               boxWidth: 14,
               boxHeight: 2,
               font: { family: "'Outfit', sans-serif", size: 10 },
@@ -84,53 +85,45 @@ function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
           tooltip: {
             mode: 'index',
             intersect: false,
-            backgroundColor: '#10151f',
-            titleColor: '#8b9bb4',
-            bodyColor: '#e8edf5',
-            borderColor: '#1d2839',
+            backgroundColor: '#1e222d',
+            titleColor: NEUTRAL,
+            bodyColor: '#d1d4dc',
+            borderColor: '#2a2e39',
             borderWidth: 1,
-            bodyFont: {
-              family: "'Outfit', sans-serif",
-            },
-            titleFont: {
-              family: "'Outfit', sans-serif",
-            },
+            bodyFont: { family: "'JetBrains Mono', monospace", size: 11 },
+            titleFont: { family: "'Outfit', sans-serif", size: 10 },
           },
         },
         scales: {
           x: {
-            grid: {
-              color: 'rgba(29, 40, 57, 0.5)',
+            type: 'timeseries',
+            time: {
+              unit: 'minute',
+              tooltipFormat: 'HH:mm',
+              displayFormats: { minute: 'HH:mm' },
             },
+            grid: { color: GRID },
             ticks: {
-              color: '#8b9bb4',
-              font: {
-                family: "'Outfit', sans-serif",
-                size: 10,
-              },
-              maxTicksLimit: 12,
+              color: NEUTRAL,
+              font: { family: "'Outfit', sans-serif", size: 10 },
+              maxTicksLimit: 10,
+              maxRotation: 0,
             },
           },
           y: {
-            grid: {
-              color: 'rgba(29, 40, 57, 0.5)',
-            },
+            // Price axis on the RIGHT — the trading-terminal convention
+            position: 'right',
+            grid: { color: GRID },
             ticks: {
-              color: '#8b9bb4',
-              font: {
-                family: "'JetBrains Mono', monospace",
-                size: 10,
-              },
-              callback: function (value) {
-                return value.toLocaleString(undefined, { minimumFractionDigits: 2 });
-              },
+              color: NEUTRAL,
+              font: { family: "'JetBrains Mono', monospace", size: 10 },
+              callback: (value) => value.toLocaleString(undefined, { minimumFractionDigits: 2 }),
             },
           },
         },
       },
     });
 
-    // Cleanup on unmount
     return () => {
       if (chartInstanceRef.current) {
         chartInstanceRef.current.destroy();
@@ -161,14 +154,10 @@ function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
       }
     }
 
-    // Refresh chart datasets (price series + VWAP benchmark line)
-    chart.data.labels = candles.map((c) =>
-      new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    );
-    chart.data.datasets[0].data = candles.map((c) => c.close);
-    chart.data.datasets[1].data = candles.map(() => sessionVwap ?? null);
+    chart.data.datasets[0].data = candles.map(toPoint);
+    chart.data.datasets[1].data = candles.map((c) => ({ x: c.timestamp, y: sessionVwap ?? null }));
 
-    // Update the chart without trigger transitions to save performance
+    // Update the chart without transitions to save performance
     chart.update('none');
   }, [activeCandle, sessionVwap]);
 
