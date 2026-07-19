@@ -24,6 +24,7 @@ import TicketPanel from './components/TicketPanel';
 import Blotter from './components/Blotter';
 import PriceChart from './components/PriceChart';
 import { PaperOMS, positionUnrealized } from '../../shared/oms.js';
+import { createEmptyRecord } from '../../shared/hub.js';
 import { fetchHealth, fetchHistory, createDataFeed, feedTargetLabel, symbolLabel, DIRECT_MODE } from './dataSource';
 import { formatPrice, formatDeltaPct, spreadInfo, formatSigned, formatQty } from './format';
 import './App.css';
@@ -78,8 +79,6 @@ function App() {
 
   const feedRef = useRef(null);
   const prevTabPriceRef = useRef(null);
-  // First price seen per symbol this session — the baseline for "Session Δ"
-  const sessionOpenRef = useRef({});
   // Live mirror of activeAlerts for the reconnect handler: reading the state
   // directly there would capture a stale closure (alerts set after connect
   // would never re-register on reconnect).
@@ -206,18 +205,10 @@ function App() {
           setAlertSymbol(upperSymbols[0]);
         }
 
-        // Pre-initialize empty records for each symbol
+        // Pre-initialize empty records for each symbol (shared shape)
         const initialRecords = {};
         upperSymbols.forEach((sym) => {
-          initialRecords[sym] = {
-            symbol: sym,
-            lastPrice: null,
-            bestBid: null,
-            bestAsk: null,
-            lastTradeTime: null,
-            activeCandle: null,
-            source: null,
-          };
+          initialRecords[sym] = createEmptyRecord(sym);
         });
         setRecords(initialRecords);
       })
@@ -289,40 +280,20 @@ function App() {
       feed.on('update', (data) => {
         const sym = data.symbol.toUpperCase();
 
-        // Capture the session baseline the first time a symbol prints
-        if (
-          data.lastPrice !== null &&
-          data.lastPrice !== undefined &&
-          sessionOpenRef.current[sym] === undefined
-        ) {
-          sessionOpenRef.current[sym] = data.lastPrice;
-        }
-
         // Tick the paper OMS with the same golden record (executes any
         // resting limit orders the new top-of-book crosses)
         omsRef.current.onTick(data);
 
-        setRecords((prev) => {
-          const currentPrice = data.lastPrice;
-          const previous = prev[sym];
-          if (previous && currentPrice !== null && currentPrice !== undefined) {
-            if (previous.lastPrice !== null && previous.lastPrice !== undefined) {
-              if (currentPrice > previous.lastPrice) {
-                logMessage('UPDATE', `${sym} price ticked UP to ${currentPrice}`);
-              } else if (currentPrice < previous.lastPrice) {
-                logMessage('UPDATE', `${sym} price ticked DOWN to ${currentPrice}`);
-              }
-            }
-          }
-          return {
-            ...prev,
-            [sym]: {
-              ...prev[sym],
-              ...data,
-              lastReceivedAt: Date.now(),
-            },
-          };
-        });
+        // Merge into records only — per-tick console logging was removed:
+        // it drowned the protocol console and re-rendered on every tick.
+        setRecords((prev) => ({
+          ...prev,
+          [sym]: {
+            ...prev[sym],
+            ...data,
+            lastReceivedAt: Date.now(),
+          },
+        }));
       });
 
       feed.on('alertConfirmed', (data) => {
@@ -472,7 +443,7 @@ function App() {
   const poolSymbols = symbols.map((s) => s.toUpperCase());
   const selectedRecord = selectedSymbol ? records[selectedSymbol] : null;
   const selectedDelta = selectedRecord
-    ? formatDeltaPct(selectedRecord.lastPrice, sessionOpenRef.current[selectedSymbol])
+    ? formatDeltaPct(selectedRecord.lastPrice, selectedRecord.open24h)
     : null;
   const selectedSpread = selectedRecord
     ? spreadInfo(selectedRecord.bestBid, selectedRecord.bestAsk)
@@ -540,8 +511,8 @@ function App() {
         </div>
       </header>
 
-      {/* Live strip: whole symbol pool with session deltas */}
-      <TickerTape symbols={poolSymbols} records={records} sessionOpen={sessionOpenRef.current} />
+      {/* Live strip: whole symbol pool with 24h deltas */}
+      <TickerTape symbols={poolSymbols} records={records} />
 
       <main className="terminal-main">
         {/* Chart panel with instrument bar (last / Δ / bid / ask / spread / OHLCV) */}
@@ -555,7 +526,7 @@ function App() {
                 </div>
                 <FlashPrice price={selectedRecord?.lastPrice} />
                 {selectedDelta && (
-                  <span className={`instrument-delta dir-${selectedDelta.dir}`}>{selectedDelta.text}</span>
+                  <span className={`instrument-delta dir-${selectedDelta.dir}`}>{selectedDelta.text} 24h</span>
                 )}
                 <div className="instrument-stats">
                   <div className="stat-block">
@@ -571,6 +542,26 @@ function App() {
                     <span className="stat-value">
                       {selectedSpread
                         ? `${selectedSpread.spread.toFixed(2)} · ${selectedSpread.bps.toFixed(1)} bps`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="stat-block">
+                    <span className="stat-label">Session VWAP</span>
+                    <span className="stat-value">{formatPrice(selectedRecord?.sessionVwap)}</span>
+                  </div>
+                  <div className="stat-block">
+                    <span className="stat-label">24h High</span>
+                    <span className="stat-value">{formatPrice(selectedRecord?.high24h)}</span>
+                  </div>
+                  <div className="stat-block">
+                    <span className="stat-label">24h Low</span>
+                    <span className="stat-value">{formatPrice(selectedRecord?.low24h)}</span>
+                  </div>
+                  <div className="stat-block">
+                    <span className="stat-label">24h Vol</span>
+                    <span className="stat-value">
+                      {selectedRecord?.volume24h !== null && selectedRecord?.volume24h !== undefined
+                        ? selectedRecord.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 })
                         : '—'}
                     </span>
                   </div>
@@ -597,6 +588,7 @@ function App() {
                   symbol={selectedSymbol}
                   historicalCandles={historicalCandles}
                   activeCandle={activeCandle}
+                  sessionVwap={selectedRecord?.sessionVwap}
                 />
               ) : (
                 <div className="chart-empty">Backfilling 1m history…</div>
@@ -614,7 +606,6 @@ function App() {
           <MarketWatch
             symbols={poolSymbols}
             records={records}
-            sessionOpen={sessionOpenRef.current}
             watchlist={watchlist}
             selectedSymbol={selectedSymbol}
             onSelect={setSelectedSymbol}

@@ -3,10 +3,14 @@ import { Chart, registerables } from 'chart.js';
 
 Chart.register(...registerables);
 
-function PriceChart({ symbol, historicalCandles, activeCandle }) {
+function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
   const canvasRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const candlesRef = useRef([]);
+  // Latest VWAP for the (re)build effect — a ref so a VWAP tick never
+  // destroys/recreates the whole chart; the live effect repaints the line.
+  const vwapRef = useRef(sessionVwap);
+  vwapRef.current = sessionVwap;
 
   // 1. Initialize and update chart on new historical data (e.g., symbol change)
   useEffect(() => {
@@ -34,7 +38,7 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
         labels,
         datasets: [
           {
-            label: `${symbol} 1m Candle Close`,
+            label: `${symbol} 1m Close`,
             data,
             // Neutral series blue (5.0:1 on the panel surface) — the up/down
             // greens/reds are reserved for directional deltas, not the series.
@@ -46,14 +50,36 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
             pointRadius: 0, // hide points for a clean look
             pointHoverRadius: 4,
           },
+          {
+            label: 'Session VWAP',
+            // Horizontal benchmark line at the live session VWAP (violet —
+            // distinct from the price series, not a status color)
+            data: labels.map(() => vwapRef.current ?? null),
+            borderColor: '#9085e9',
+            borderDash: [6, 4],
+            borderWidth: 1.5,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+          },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
+          // Two series on one axis -> the legend is required so identity is
+          // never color-alone
           legend: {
-            display: false,
+            display: true,
+            position: 'top',
+            align: 'end',
+            labels: {
+              color: '#8b9bb4',
+              boxWidth: 14,
+              boxHeight: 2,
+              font: { family: "'Outfit', sans-serif", size: 10 },
+            },
           },
           tooltip: {
             mode: 'index',
@@ -113,7 +139,7 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
     };
   }, [historicalCandles, symbol]);
 
-  // 2. Incorporate live active candle updates from WebSocket
+  // 2. Incorporate live active-candle + VWAP updates from the feed
   useEffect(() => {
     const chart = chartInstanceRef.current;
     if (!chart || !activeCandle) return;
@@ -135,15 +161,16 @@ function PriceChart({ symbol, historicalCandles, activeCandle }) {
       }
     }
 
-    // Refresh chart datasets
+    // Refresh chart datasets (price series + VWAP benchmark line)
     chart.data.labels = candles.map((c) =>
       new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     );
     chart.data.datasets[0].data = candles.map((c) => c.close);
+    chart.data.datasets[1].data = candles.map(() => sessionVwap ?? null);
 
     // Update the chart without trigger transitions to save performance
     chart.update('none');
-  }, [activeCandle]);
+  }, [activeCandle, sessionVwap]);
 
   return (
     <div className="chart-canvas-wrap">

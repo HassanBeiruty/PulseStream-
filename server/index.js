@@ -26,6 +26,7 @@ import { BinanceFeedHandler } from './feedHandler.js';
 import { normalize } from '../shared/normalizer.js';
 import { Hub } from '../shared/hub.js';
 import { CandleAggregator } from '../shared/candleAggregator.js';
+import { VwapCalculator } from '../shared/analytics.js';
 import { AlertBook } from '../shared/alertBook.js';
 import { klinesToCandles } from '../shared/klines.js';
 import { ClientMsg, ServerMsg, THROTTLE_MS } from '../shared/protocol.js';
@@ -43,6 +44,7 @@ app.use(express.static(publicDir));
 // Lightweight health check — includes current golden records from Hub
 const hub = new Hub(config.symbols);
 const candleAggregator = new CandleAggregator();
+const vwap = new VwapCalculator();
 
 app.get('/health', (req, res) => {
   const records = {};
@@ -91,6 +93,11 @@ feed.on('raw', ({ stream, data }) => {
       const activeCandle = candleAggregator.update(update);
       if (activeCandle) {
         update.activeCandle = activeCandle;
+      }
+      // Session VWAP accumulates from real trades only, inside the pipeline
+      const sessionVwap = vwap.update(update);
+      if (sessionVwap !== null) {
+        update.sessionVwap = sessionVwap;
       }
     }
     hub.update(update);

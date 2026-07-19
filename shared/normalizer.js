@@ -43,5 +43,18 @@ export function normalize(stream, data) {
     };
   }
 
+  // 24h rolling-window stats (open/high/low/base volume). Deliberately does
+  // NOT set lastPrice — the trade stream owns that field.
+  if (stream.endsWith('@miniTicker')) {
+    return {
+      symbol,
+      open24h: parseFloat(data.o),
+      high24h: parseFloat(data.h),
+      low24h: parseFloat(data.l),
+      volume24h: parseFloat(data.v),
+      source: 'binance',
+    };
+  }
+
   return null;
 }

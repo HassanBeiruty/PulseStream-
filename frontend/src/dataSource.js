@@ -28,19 +28,32 @@ export function fetchHealth() {
   return fetch('/health').then((res) => res.json());
 }
 
-// Replaces GET /api/history — 100 recent 1m candles for chart backfill.
-// Direct mode does the same Binance klines call the server does in
-// server/index.js, mapped through the SAME shared klinesToCandles module.
+// GET /api/history — 100 recent 1m candles for chart backfill.
+//   Hub mode:    served by our Express server.
+//   Direct mode: served by the Vercel serverless function (edge-cached);
+//                if that's unavailable (e.g. local Vite dev with no backend),
+//                fall back to calling Binance directly from the browser.
 export function fetchHistory(symbol) {
-  if (!DIRECT_MODE) {
-    return fetch(`/api/history?symbol=${symbol}`).then((res) => res.json());
-  }
   const upper = symbol.toUpperCase();
-  const url = `${BINANCE_REST_BASE}/klines?symbol=${upper}&interval=1m&limit=100`;
-  return fetch(url)
-    .then((res) => {
-      if (!res.ok) throw new Error(`Binance API returned status ${res.status}`);
-      return res.json();
-    })
-    .then((data) => ({ symbol: upper, candles: klinesToCandles(data) }));
+
+  const fromOwnApi = fetch(`/api/history?symbol=${upper}`).then((res) => {
+    if (!res.ok) throw new Error(`/api/history returned status ${res.status}`);
+    return res.json();
+  });
+
+  if (!DIRECT_MODE) {
+    return fromOwnApi;
+  }
+
+  const fromBinance = () => {
+    const url = `${BINANCE_REST_BASE}/klines?symbol=${upper}&interval=1m&limit=100`;
+    return fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Binance API returned status ${res.status}`);
+        return res.json();
+      })
+      .then((data) => ({ symbol: upper, candles: klinesToCandles(data) }));
+  };
+
+  return fromOwnApi.catch(fromBinance);
 }

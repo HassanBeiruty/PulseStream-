@@ -192,7 +192,7 @@ header h1 .h1-terminal {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 0.45rem 0.9rem;
+  padding: 0.55rem 1rem;
   border-right: 1px solid var(--border-soft);
   white-space: nowrap;
   font-size: 0.78rem;
@@ -220,9 +220,9 @@ header h1 .h1-terminal {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 8px;
-  padding: 8px;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .side-col {
@@ -247,7 +247,7 @@ header h1 .h1-terminal {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  padding: 0.55rem 0.8rem;
+  padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--border-soft);
   display: flex;
   justify-content: space-between;
@@ -265,7 +265,7 @@ header h1 .h1-terminal {
   display: flex;
   align-items: center;
   gap: 1.4rem;
-  padding: 0.7rem 1rem;
+  padding: 0.85rem 1.1rem;
   border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
   flex: 0 0 auto;
@@ -380,30 +380,12 @@ header h1 .h1-terminal {
   min-height: 0;
 }
 
-.mw-row,
-.mw-head {
-  display: grid;
-  grid-template-columns: 1.3fr 1.1fr 0.9fr 1fr 1fr 30px;
-  gap: 0.4rem;
-  align-items: center;
-  padding: 0.42rem 0.8rem;
-  font-size: 0.76rem;
-}
-
-.mw-head {
-  position: sticky;
-  top: 0;
-  background: var(--panel-color);
-  color: var(--text-faint);
-  text-transform: uppercase;
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-  border-bottom: 1px solid var(--border-soft);
-  z-index: 1;
-}
-
+/* Two-line rows: name + control on top, quote line below — nothing cramped */
 .mw-row {
-  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.65rem 0.9rem;
   border-bottom: 1px solid var(--border-soft);
   cursor: pointer;
   transition: background 0.12s ease;
@@ -416,45 +398,86 @@ header h1 .h1-terminal {
   box-shadow: inset 2px 0 0 var(--color-info);
 }
 
-.mw-row.unwatched {
-  opacity: 0.55;
-  font-family: var(--font-sans);
-}
+.mw-row.unwatched { opacity: 0.6; }
 
-.mw-sym {
-  font-family: var(--font-sans);
-  font-weight: 600;
+.mw-top {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mw-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   min-width: 0;
 }
 
-.mw-sym-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mw-quote {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  font-family: var(--font-mono);
 }
 
+.mw-last { font-size: 1.02rem; font-weight: 700; }
+
+.mw-chg { font-size: 0.7rem; }
+
+.mw-ba {
+  margin-left: auto;
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.mw-off {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* Numeric right-alignment (also used by the blotter tables) */
 .mw-num { text-align: right; font-variant-numeric: tabular-nums; }
 
-.mw-delta { text-align: right; font-size: 0.7rem; }
-
+/* Subscribe/unsubscribe control — a real touch target now */
 .mw-toggle {
   background: transparent;
   border: 1px solid var(--border-color);
   color: var(--text-muted);
-  border-radius: 4px;
-  width: 22px;
-  height: 22px;
+  border-radius: 5px;
+  height: 26px;
+  min-width: 26px;
   line-height: 1;
   cursor: pointer;
-  font-size: 0.8rem;
-  padding: 0;
-  justify-self: end;
+  font-size: 0.9rem;
+  padding: 0 0.4rem;
+  flex: 0 0 auto;
+}
+
+.mw-toggle.unwatched {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 0.6rem;
+  color: var(--color-info);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .mw-toggle:hover { border-color: var(--text-muted); color: var(--text-color); }
+
+.mw-toggle.unwatched:hover {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-info);
+  border-color: var(--color-info);
+}
+
 .mw-toggle.watched:hover { border-color: var(--color-down); color: var(--color-down); }
 
 /* --- Directional coloring (always paired with sign/arrow in markup) ------------- */
@@ -604,8 +627,8 @@ header h1 .h1-terminal {
 
 .blotter {
   flex: 0 0 auto;
-  height: 188px;
-  margin: 0 8px 8px;
+  height: 200px;
+  margin: 0 10px 10px;
   display: flex;
   flex-direction: column;
 }

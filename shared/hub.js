@@ -24,6 +24,11 @@ export function createEmptyRecord(symbol) {
     bestAsk: null,
     lastTradeTime: null,
     activeCandle: null,
+    open24h: null,
+    high24h: null,
+    low24h: null,
+    volume24h: null,
+    sessionVwap: null,
     source: null,
   };
 }

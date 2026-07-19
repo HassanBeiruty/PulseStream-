@@ -1,5 +1,7 @@
 # PulseStream — Live Market Data Terminal
 
+[![CI](https://github.com/HassanBeiruty/PulseStream-/actions/workflows/ci.yml/badge.svg)](https://github.com/HassanBeiruty/PulseStream-/actions/workflows/ci.yml)
+
 A learning project that builds a **multiplexed live market-data hub** on top of Binance's free public WebSocket streams, presented as a **trading-terminal UI** — ticker tape, market watch, live chart with instrument bar (last / session Δ / bid / ask / spread in bps), alert ticket, and a console/alerts blotter. One upstream connection ingests real-time trades and best bid/ask, normalizes them into a single internal schema, and fans them out to many consumers — with self-built 1-minute OHLCV candles, a live watchlist, and price alerts.
 
 > Market data only — no API key, no trading, no money movement. The market runs 24/7 so there's always live data to watch.
@@ -50,12 +52,12 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 ## Features
 
 **Terminal UI**
-- **Ticker tape** — live strip of the whole symbol pool with session Δ% (signed + arrowed, colorblind-safe by construction).
-- **Market watch** — dense live rows (last / session Δ / bid / ask) with tick-direction row flashes, staleness badges, and +/× toggles that drive **real subscribe/unsubscribe** messages.
-- **Instrument bar** — big live last price, session Δ, bid/ask, **spread in absolute and basis points**, and the live self-built 1m OHLCV bucket.
-- **Live chart** — Chart.js, backfilled from REST klines on load, then continued from self-built candles.
+- **Ticker tape** — live strip of the whole symbol pool with 24h Δ% (signed + arrowed, colorblind-safe by construction).
+- **Market watch** — two-line live rows (last / 24h Δ / bid × ask) with tick-direction flashes, staleness badges, and Watch/× controls that drive **real subscribe/unsubscribe** messages.
+- **Instrument bar** — big live last price, 24h Δ, bid/ask, **spread in absolute and basis points**, **session VWAP**, 24h high/low/volume, and the live self-built 1m OHLCV bucket.
+- **Live chart** — Chart.js with a **session VWAP benchmark overlay**, backfilled from REST klines on load, then continued from self-built candles.
 - **Alert ticket** — order-ticket-style panel (▲ Above / ▼ Below sides); triggered alerts toast in-page.
-- **Blotter** — bottom tabs: the protocol console (SUBSCRIBE/UPDATE/alert log) and the active-alerts table.
+- **Blotter** — bottom tabs: protocol console, paper positions/orders/fills, and active alerts.
 
 **Paper trading (simulated — no real orders, ever)**
 - **Order ticket** — BUY/SELL × MARKET/LIMIT with live estimated notional + fee; trades the selected instrument.
@@ -65,9 +67,16 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 
 **Data plumbing**
 - **Live prices pushed over WebSocket**, never polled; UI updates **throttled to ~300ms** per symbol.
+- **Three upstream streams per symbol** — `@trade` (prints), `@bookTicker` (L1 quotes), `@miniTicker` (24h rolling stats) — merged into one golden record.
+- **Session VWAP** computed inside the ingestion pipeline from real trades ([shared/analytics.js](shared/analytics.js)) — never from throttled UI updates.
 - **Connection status** — `live` / `reconnecting` / `stale` (stale = connection open but no fresh data for >10s).
 - **Self-built 1m OHLCV candles** — aggregated from the trade stream.
 - **Reconnect with exponential backoff + full jitter** — same policy in both runtimes.
+
+**Engineering**
+- **Unit-tested shared core** — [Vitest](tests/) covers the normalizer, candle aggregator, hub pub-sub, alert book, VWAP, klines mapping, and the full OMS lifecycle (fills, flips through zero, fees, persistence).
+- **CI on every push/PR** — GitHub Actions runs tests, lint, and both build modes ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+- **Serverless backfill API** — [api/history.js](api/history.js) proxies Binance klines behind Vercel's edge CDN (`s-maxage` + `stale-while-revalidate`), with a direct-to-Binance fallback in the browser.
 
 Configured symbols: `PAXGUSDT`, `BTCUSDT`, `ETHUSDT` (edit once in [shared/symbols.js](shared/symbols.js)).
 
@@ -158,6 +167,7 @@ npm run feed:demo
 │   ├── hub.js              # Pub-sub broker (golden records + subscriptions)
 │   ├── alertBook.js        # Price-alert registry + trigger-once evaluation
 │   ├── oms.js              # Paper-trading OMS (simulated fills, positions, P&L)
+│   ├── analytics.js        # Session VWAP (volume-weighted average price)
 │   ├── klines.js           # Binance klines -> internal candle mapping
 │   └── emitter.js          # Minimal dependency-free event emitter
 ├── server/                 # Backend runtime (Node, ESM)
@@ -170,6 +180,9 @@ npm run feed:demo
 │       ├── components/     # TickerTape, MarketWatch, TicketPanel (Trade/Alert), Blotter, PriceChart
 │       ├── dataSource.js   # Facade: feed factory + REST helpers
 │       └── format.js       # Price/delta/P&L/spread display formatting
+├── api/                    # Vercel serverless functions (edge-cached backfill)
+├── tests/                  # Vitest unit tests for the shared core
+├── .github/workflows/      # CI: tests + lint + both builds on every push
 ├── scripts/                # Standalone demos (feed, hub)
 ├── public/                 # Built frontend (served by the Node server)
 └── package.json

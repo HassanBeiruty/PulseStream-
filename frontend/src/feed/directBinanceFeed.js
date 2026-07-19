@@ -19,6 +19,7 @@
 import { Emitter } from '../../../shared/emitter.js';
 import { normalize } from '../../../shared/normalizer.js';
 import { CandleAggregator } from '../../../shared/candleAggregator.js';
+import { VwapCalculator } from '../../../shared/analytics.js';
 import { Hub } from '../../../shared/hub.js';
 import { AlertBook } from '../../../shared/alertBook.js';
 import { THROTTLE_MS } from '../../../shared/protocol.js';
@@ -44,6 +45,7 @@ export class DirectBinanceFeed {
     // The same layer objects the server wires up in server/index.js
     this.hub = new Hub(this.symbols);
     this.candleAggregator = new CandleAggregator();
+    this.vwap = new VwapCalculator();
     this.alerts = new AlertBook();
 
     // Per-consumer state (this adapter IS the "client connection")
@@ -125,7 +127,11 @@ export class DirectBinanceFeed {
     // filter per-consumer downstream — exactly how the server's feed handler
     // ingests everything while the hub filters per subscriber.
     const streams = this.symbols
-      .flatMap((s) => [`${s.toLowerCase()}@trade`, `${s.toLowerCase()}@bookTicker`])
+      .flatMap((s) => [
+        `${s.toLowerCase()}@trade`,
+        `${s.toLowerCase()}@bookTicker`,
+        `${s.toLowerCase()}@miniTicker`,
+      ])
       .join('/');
 
     const ws = new WebSocket(`${BINANCE_WS_BASE}?streams=${streams}`);
@@ -212,12 +218,16 @@ export class DirectBinanceFeed {
     const update = normalize(stream, data);
     if (!update) return;
 
-    // Only @trade updates carry a `quantity`. The resulting 1m candle rides
-    // along on the same update — mirroring server/index.js exactly.
+    // Only @trade updates carry a `quantity`. The resulting 1m candle and
+    // session VWAP ride along on the same update — mirroring server/index.js.
     if (update.quantity !== undefined) {
       const activeCandle = this.candleAggregator.update(update);
       if (activeCandle) {
         update.activeCandle = activeCandle;
+      }
+      const sessionVwap = this.vwap.update(update);
+      if (sessionVwap !== null) {
+        update.sessionVwap = sessionVwap;
       }
     }
     this.hub.update(update); // hub notifies this adapter's subscriptions below

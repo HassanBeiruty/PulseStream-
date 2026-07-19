@@ -54,7 +54,7 @@ export class BinanceFeedHandler extends EventEmitter {
     const streams = this.symbols
       .flatMap((sym) => {
         const s = sym.toLowerCase();
-        return [`${s}@trade`, `${s}@bookTicker`];
+        return [`${s}@trade`, `${s}@bookTicker`, `${s}@miniTicker`];
       })
       .join('/');
     return `${config.binance.wsBase}?streams=${streams}`;
