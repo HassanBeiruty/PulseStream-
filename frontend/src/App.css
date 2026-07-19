@@ -225,13 +225,15 @@ header h1 .h1-terminal {
   padding: 10px;
 }
 
-.side-col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  /* If the viewport is short, scroll the column instead of crushing panels */
-  overflow-y: auto;
+/* Bottom band: blotter (left) + ticket (right), mirroring the main grid's
+   column split so the ticket sits directly under the market watch */
+.bottom-row {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  gap: 10px;
+  margin: 0 10px 10px;
+  align-items: stretch;
 }
 
 .panel {
@@ -373,11 +375,9 @@ header h1 .h1-terminal {
 /* --- Market watch ---------------------------------------------------------------- */
 
 .market-watch {
-  flex: 1;
-  /* Never collapse below the height of the full 3-symbol pool — the
-     watchlist must be visible without scrolling */
-  min-height: 248px;
-  flex-shrink: 0;
+  /* Grid child of .terminal-main: stretches to the full right column, so the
+     whole symbol pool is visible with no scrolling */
+  min-height: 0;
 }
 
 .mw-scroll {
@@ -634,9 +634,9 @@ header h1 .h1-terminal {
 /* --- Blotter (bottom tabs) ----------------------------------------------------------- */
 
 .blotter {
-  flex: 0 0 auto;
-  height: 200px;
-  margin: 0 10px 10px;
+  /* Stretches to match the ticket beside it — extra height means more
+     visible console lines, not dead space */
+  min-height: 210px;
   display: flex;
   flex-direction: column;
 }
@@ -950,7 +950,8 @@ header h1 .h1-terminal {
   .app-container { height: auto; min-height: 100vh; overflow: visible; }
   .terminal-main { grid-template-columns: 1fr; }
   .chart-card { min-height: 380px; }
-  .market-watch { flex: none; max-height: 300px; }
-  .blotter { height: 220px; }
+  .market-watch { max-height: 320px; }
+  .bottom-row { grid-template-columns: 1fr; }
+  .blotter { min-height: 220px; }
   .instrument-stats { margin-left: 0; }
 }

@@ -79,6 +79,8 @@ function App() {
 
   const feedRef = useRef(null);
   const prevTabPriceRef = useRef(null);
+  // Per-symbol throttle state for console heartbeat lines (1 per ~5s)
+  const tickLogRef = useRef({});
   // Live mirror of activeAlerts for the reconnect handler: reading the state
   // directly there would capture a stale closure (alerts set after connect
   // would never re-register on reconnect).
@@ -284,14 +286,30 @@ function App() {
         // resting limit orders the new top-of-book crosses)
         omsRef.current.onTick(data);
 
-        // Merge into records only — per-tick console logging was removed:
-        // it drowned the protocol console and re-rendered on every tick.
+        // Console heartbeat: at most ONE line per symbol per 5s, with a
+        // conflation count — alive without drowning the protocol log.
+        const beat = tickLogRef.current[sym] || { count: 0, lastLoggedAt: 0, lastPrice: null };
+        beat.count += 1;
+        const now = Date.now();
+        if (data.lastPrice !== null && data.lastPrice !== undefined && now - beat.lastLoggedAt >= 5000) {
+          const arrow =
+            beat.lastPrice === null ? '' : data.lastPrice > beat.lastPrice ? ' ▲' : data.lastPrice < beat.lastPrice ? ' ▼' : '';
+          logMessage('UPDATE', `${sym} ${data.lastPrice}${arrow} (${beat.count} updates conflated)`);
+          beat.lastLoggedAt = now;
+          beat.lastPrice = data.lastPrice;
+          beat.count = 0;
+        }
+        tickLogRef.current[sym] = beat;
+
         setRecords((prev) => ({
           ...prev,
           [sym]: {
             ...prev[sym],
             ...data,
-            lastReceivedAt: Date.now(),
+            // Only stamp freshness when the update carries real market data —
+            // the initial empty golden record (source: null) must show
+            // "waiting", not become "stale" 10s later.
+            lastReceivedAt: data.source ? now : (prev[sym]?.lastReceivedAt ?? null),
           },
         }));
       });
@@ -601,49 +619,51 @@ function App() {
           )}
         </section>
 
-        {/* Right column: market watch + alert ticket */}
-        <div className="side-col">
-          <MarketWatch
-            symbols={poolSymbols}
-            records={records}
-            watchlist={watchlist}
-            selectedSymbol={selectedSymbol}
-            onSelect={setSelectedSymbol}
-            onToggle={toggleWatchlist}
-          />
-          <TicketPanel
-            trade={{
-              selectedSymbol: selectedSymbol && watchlist.includes(selectedSymbol) ? selectedSymbol : '',
-              record: selectedRecord,
-              feeBps: omsState.feeBps,
-              onPlaceOrder: handlePlaceOrder,
-            }}
-            alert={{
-              watchlist,
-              alertSymbol,
-              alertPrice,
-              alertCondition,
-              onSymbolChange: setAlertSymbol,
-              onPriceChange: setAlertPrice,
-              onConditionChange: setAlertCondition,
-              onSubmit: handleSetAlert,
-            }}
-          />
-        </div>
+        {/* Right column: market watch gets the full height — every symbol
+            visible with no scrolling */}
+        <MarketWatch
+          symbols={poolSymbols}
+          records={records}
+          watchlist={watchlist}
+          selectedSymbol={selectedSymbol}
+          onSelect={setSelectedSymbol}
+          onToggle={toggleWatchlist}
+        />
       </main>
 
-      {/* Bottom blotter: console, paper positions/orders/fills, alerts */}
-      <Blotter
-        logs={logs}
-        onClearLogs={clearLogs}
-        alerts={activeAlerts}
-        onDeleteAlert={handleDeleteAlert}
-        positions={positionsView}
-        totalRealizedPnl={omsState.totalRealizedPnl}
-        openOrders={omsState.openOrders}
-        fills={omsState.fills}
-        onCancelOrder={handleCancelOrder}
-      />
+      {/* Bottom band: blotter on the left, trade/alert ticket on the right
+          (same column split as the main grid) */}
+      <div className="bottom-row">
+        <Blotter
+          logs={logs}
+          onClearLogs={clearLogs}
+          alerts={activeAlerts}
+          onDeleteAlert={handleDeleteAlert}
+          positions={positionsView}
+          totalRealizedPnl={omsState.totalRealizedPnl}
+          openOrders={omsState.openOrders}
+          fills={omsState.fills}
+          onCancelOrder={handleCancelOrder}
+        />
+        <TicketPanel
+          trade={{
+            selectedSymbol: selectedSymbol && watchlist.includes(selectedSymbol) ? selectedSymbol : '',
+            record: selectedRecord,
+            feeBps: omsState.feeBps,
+            onPlaceOrder: handlePlaceOrder,
+          }}
+          alert={{
+            watchlist,
+            alertSymbol,
+            alertPrice,
+            alertCondition,
+            onSymbolChange: setAlertSymbol,
+            onPriceChange: setAlertPrice,
+            onConditionChange: setAlertCondition,
+            onSubmit: handleSetAlert,
+          }}
+        />
+      </div>
     </div>
   );
 }
