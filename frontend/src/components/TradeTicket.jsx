@@ -39,73 +39,77 @@ function TradeTicket({ selectedSymbol, record, feeBps, onPlaceOrder }) {
         {disabled ? 'Select an instrument in Market Watch' : `${symbolLabel(selectedSymbol)} · paper`}
       </div>
 
-      <div className="ticket-side">
-        <button
-          type="button"
-          className={`side-btn buy ${side === 'BUY' ? 'active' : ''}`}
-          onClick={() => setSide('BUY')}
-          disabled={disabled}
-        >
-          Buy
-        </button>
-        <button
-          type="button"
-          className={`side-btn sell ${side === 'SELL' ? 'active' : ''}`}
-          onClick={() => setSide('SELL')}
-          disabled={disabled}
-        >
-          Sell
-        </button>
+      {/* One compact row: side + order type side by side */}
+      <div className="ticket-row">
+        <div className="ticket-side">
+          <button
+            type="button"
+            className={`side-btn buy ${side === 'BUY' ? 'active' : ''}`}
+            onClick={() => setSide('BUY')}
+            disabled={disabled}
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            className={`side-btn sell ${side === 'SELL' ? 'active' : ''}`}
+            onClick={() => setSide('SELL')}
+            disabled={disabled}
+          >
+            Sell
+          </button>
+        </div>
+        <div className="ticket-side">
+          <button
+            type="button"
+            className={`type-btn ${type === 'MARKET' ? 'active' : ''}`}
+            onClick={() => setType('MARKET')}
+            disabled={disabled}
+          >
+            Market
+          </button>
+          <button
+            type="button"
+            className={`type-btn ${type === 'LIMIT' ? 'active' : ''}`}
+            onClick={() => setType('LIMIT')}
+            disabled={disabled}
+          >
+            Limit
+          </button>
+        </div>
       </div>
 
-      <div className="ticket-side">
-        <button
-          type="button"
-          className={`type-btn ${type === 'MARKET' ? 'active' : ''}`}
-          onClick={() => setType('MARKET')}
-          disabled={disabled}
-        >
-          Market
-        </button>
-        <button
-          type="button"
-          className={`type-btn ${type === 'LIMIT' ? 'active' : ''}`}
-          onClick={() => setType('LIMIT')}
-          disabled={disabled}
-        >
-          Limit
-        </button>
-      </div>
-
-      <div className="form-group">
-        <label>Quantity ({selectedSymbol ? selectedSymbol.replace('USDT', '') : 'base'})</label>
-        <input
-          type="number"
-          step="any"
-          min="0"
-          placeholder="e.g. 0.01"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          required
-          disabled={disabled}
-        />
-      </div>
-
-      {type === 'LIMIT' && (
+      {/* Quantity (+ limit price when LIMIT) share one row */}
+      <div className="ticket-row">
         <div className="form-group">
-          <label>Limit Price (USDT)</label>
+          <label>Qty ({selectedSymbol ? selectedSymbol.replace('USDT', '') : 'base'})</label>
           <input
             type="number"
             step="any"
             min="0"
-            placeholder={touch ? `touch ${formatPrice(touch)}` : 'e.g. 65000'}
-            value={limitPrice}
-            onChange={(e) => setLimitPrice(e.target.value)}
+            placeholder="e.g. 0.01"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
             required
             disabled={disabled}
           />
         </div>
-      )}
+        {type === 'LIMIT' && (
+          <div className="form-group">
+            <label>Limit (USDT)</label>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              placeholder={touch ? `touch ${formatPrice(touch)}` : 'e.g. 65000'}
+              value={limitPrice}
+              onChange={(e) => setLimitPrice(e.target.value)}
+              required
+              disabled={disabled}
+            />
+          </div>
+        )}
+      </div>
 
       <div className="ticket-est">
         <span>Est. {type === 'MARKET' ? `@ ${formatPrice(touch)}` : `@ ${limitPrice || '—'}`}</span>

@@ -532,7 +532,9 @@ function App() {
       {/* Live strip: whole symbol pool with 24h deltas */}
       <TickerTape symbols={poolSymbols} records={records} />
 
-      <main className="terminal-main">
+      <main className="terminal-body">
+        {/* Left column: chart on top, blotter below */}
+        <div className="main-col">
         {/* Chart panel with instrument bar (last / Δ / bid / ask / spread / OHLCV) */}
         <section className="panel chart-card">
           {selectedSymbol && watchlist.includes(selectedSymbol) ? (
@@ -619,21 +621,7 @@ function App() {
           )}
         </section>
 
-        {/* Right column: market watch gets the full height — every symbol
-            visible with no scrolling */}
-        <MarketWatch
-          symbols={poolSymbols}
-          records={records}
-          watchlist={watchlist}
-          selectedSymbol={selectedSymbol}
-          onSelect={setSelectedSymbol}
-          onToggle={toggleWatchlist}
-        />
-      </main>
-
-      {/* Bottom band: blotter on the left, trade/alert ticket on the right
-          (same column split as the main grid) */}
-      <div className="bottom-row">
+        {/* Blotter under the chart: console, positions, orders, fills, alerts */}
         <Blotter
           logs={logs}
           onClearLogs={clearLogs}
@@ -645,25 +633,39 @@ function App() {
           fills={omsState.fills}
           onCancelOrder={handleCancelOrder}
         />
-        <TicketPanel
-          trade={{
-            selectedSymbol: selectedSymbol && watchlist.includes(selectedSymbol) ? selectedSymbol : '',
-            record: selectedRecord,
-            feeBps: omsState.feeBps,
-            onPlaceOrder: handlePlaceOrder,
-          }}
-          alert={{
-            watchlist,
-            alertSymbol,
-            alertPrice,
-            alertCondition,
-            onSymbolChange: setAlertSymbol,
-            onPriceChange: setAlertPrice,
-            onConditionChange: setAlertCondition,
-            onSubmit: handleSetAlert,
-          }}
-        />
-      </div>
+        </div>
+
+        {/* Independent right section: market watch sized to its rows, and the
+            trade/alert ticket takes ALL the remaining height below it */}
+        <div className="right-col">
+          <MarketWatch
+            symbols={poolSymbols}
+            records={records}
+            watchlist={watchlist}
+            selectedSymbol={selectedSymbol}
+            onSelect={setSelectedSymbol}
+            onToggle={toggleWatchlist}
+          />
+          <TicketPanel
+            trade={{
+              selectedSymbol: selectedSymbol && watchlist.includes(selectedSymbol) ? selectedSymbol : '',
+              record: selectedRecord,
+              feeBps: omsState.feeBps,
+              onPlaceOrder: handlePlaceOrder,
+            }}
+            alert={{
+              watchlist,
+              alertSymbol,
+              alertPrice,
+              alertCondition,
+              onSymbolChange: setAlertSymbol,
+              onPriceChange: setAlertPrice,
+              onConditionChange: setAlertCondition,
+              onSubmit: handleSetAlert,
+            }}
+          />
+        </div>
+      </main>
     </div>
   );
 }

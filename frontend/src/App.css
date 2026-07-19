@@ -216,25 +216,42 @@ header h1 .h1-terminal {
 
 /* --- Main grid ---------------------------------------------------------------- */
 
-.terminal-main {
+.terminal-body {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 384px;
+  display: flex;
   gap: 10px;
   padding: 10px;
 }
 
-/* Bottom band: blotter (left) + ticket (right), mirroring the main grid's
-   column split so the ticket sits directly under the market watch */
-.bottom-row {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 384px;
+/* Left: chart (all spare height) over blotter (fixed) */
+.main-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  margin: 0 10px 10px;
-  align-items: stretch;
 }
+
+/* Right: independent section — market watch content-sized on top, ticket
+   fills everything below */
+.right-col {
+  flex: 0 0 384px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Compact ticket rows: two controls share a line; a lone child spans it */
+.ticket-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.ticket-row > :only-child { grid-column: 1 / -1; }
 
 .panel {
   background: var(--panel-color);
@@ -262,8 +279,16 @@ header h1 .h1-terminal {
 /* --- Chart panel --------------------------------------------------------------- */
 
 .chart-card {
+  flex: 1; /* the chart takes ALL spare vertical space in the left column */
   min-width: 0;
+  min-height: 0;
+  /* The Chart.js canvas must never paint outside its panel */
+  overflow: hidden;
 }
+
+/* Column children must be allowed to shrink below their content size */
+.main-col > .panel,
+.right-col > .panel { min-height: 0; }
 
 .instrument-bar {
   display: flex;
@@ -375,9 +400,10 @@ header h1 .h1-terminal {
 /* --- Market watch ---------------------------------------------------------------- */
 
 .market-watch {
-  /* Grid child of .terminal-main: stretches to the full right column, so the
-     whole symbol pool is visible with no scrolling */
-  min-height: 0;
+  /* Content-sized: exactly as tall as its rows — no dead space. The ticket
+     below inherits everything else. Capped so a big pool still scrolls. */
+  flex: 0 0 auto;
+  max-height: 60%;
 }
 
 .mw-scroll {
@@ -540,7 +566,11 @@ header h1 .h1-terminal {
 
 /* --- Alert ticket ------------------------------------------------------------------ */
 
-.alert-ticket { flex: 0 0 auto; }
+.alert-ticket {
+  flex: 1; /* the ticket absorbs all height the market watch doesn't use */
+  min-height: 0;
+  overflow-y: auto; /* on very short screens the form scrolls inside */
+}
 
 .alert-ticket { flex-shrink: 0; }
 
@@ -634,9 +664,9 @@ header h1 .h1-terminal {
 /* --- Blotter (bottom tabs) ----------------------------------------------------------- */
 
 .blotter {
-  /* Stretches to match the ticket beside it — extra height means more
-     visible console lines, not dead space */
-  min-height: 210px;
+  /* Fixed height under the chart; internals scroll, the panel never grows */
+  flex: 0 0 190px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -685,6 +715,7 @@ header h1 .h1-terminal {
 .console-log {
   flex: 1;
   min-height: 0;
+  height: 0; /* scroll container: never contribute intrinsic height */
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -948,10 +979,11 @@ header h1 .h1-terminal {
 
 @media (max-width: 1024px) {
   .app-container { height: auto; min-height: 100vh; overflow: visible; }
-  .terminal-main { grid-template-columns: 1fr; }
+  .terminal-body { flex-direction: column; }
+  .right-col { flex: 0 0 auto; }
+  .market-watch { max-height: none; }
   .chart-card { min-height: 380px; }
-  .market-watch { max-height: 320px; }
-  .bottom-row { grid-template-columns: 1fr; }
-  .blotter { min-height: 220px; }
+  .blotter { flex: 0 0 auto; min-height: 220px; }
+  .console-log { height: auto; max-height: 220px; }
   .instrument-stats { margin-left: 0; }
 }
