@@ -155,8 +155,8 @@ function PriceChart({ symbol, historicalCandles, activeCandle, sessionVwap }) {
     } else if (activeCandle.timestamp > lastCandle.timestamp) {
       // A new minute has rolled over! Append it to the history
       candles.push(activeCandle);
-      // Limit to 100 historical points on screen
-      if (candles.length > 100) {
+      // Cap on-screen history (persisted history can exceed the backfill window)
+      if (candles.length > 1000) {
         candles.shift();
       }
     }

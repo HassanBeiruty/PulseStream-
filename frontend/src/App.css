@@ -901,6 +901,23 @@ header h1 .h1-terminal {
 }
 
 .cols-pos { grid-template-columns: 1.1fr 0.7fr 0.9fr 1fr 1fr 1fr 1fr; }
+.cols-venue { grid-template-columns: 1.1fr 1fr 1fr 0.9fr; }
+
+.bl-note {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* Telemetry HUD grid */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.9rem 1.4rem;
+  padding: 0.8rem 1rem;
+  align-content: start;
+}
 .cols-ord { grid-template-columns: 1fr 1.1fr 0.7fr 0.7fr 0.9fr 1fr 40px; }
 .cols-fill { grid-template-columns: 1fr 1.1fr 0.7fr 0.9fr 1fr 0.8fr; }
 .cols-alert { grid-template-columns: 1.2fr 1fr 1fr 60px; }

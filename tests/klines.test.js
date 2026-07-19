@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { klinesToCandles } from '../shared/klines.js';
+import { klinesToCandles, mergeCandleHistories } from '../shared/klines.js';
 
 describe('klines mapping', () => {
   it('maps positional string arrays to typed candle objects', () => {
@@ -15,5 +15,23 @@ describe('klines mapping', () => {
 
   it('maps an empty response to an empty list', () => {
     expect(klinesToCandles([])).toEqual([]);
+  });
+});
+
+describe('candle history merge (IndexedDB + REST backfill)', () => {
+  const candle = (timestamp, close) => ({ timestamp, open: close, high: close, low: close, close, volume: 1 });
+
+  it('unions by timestamp, sorted ascending, preferred list wins conflicts', () => {
+    const stored = [candle(1000, 10), candle(2000, 20), candle(3000, 99)];
+    const rest = [candle(3000, 30), candle(4000, 40)];
+    const merged = mergeCandleHistories(stored, rest);
+    expect(merged.map((c) => c.timestamp)).toEqual([1000, 2000, 3000, 4000]);
+    expect(merged[2].close).toBe(30); // REST wins the 3000 conflict
+  });
+
+  it('handles either side empty', () => {
+    expect(mergeCandleHistories([], [candle(1, 1)])).toHaveLength(1);
+    expect(mergeCandleHistories([candle(1, 1)], [])).toHaveLength(1);
+    expect(mergeCandleHistories([], [])).toEqual([]);
   });
 });

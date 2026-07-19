@@ -33,6 +33,7 @@
 import { SYMBOLS } from '../../../shared/symbols.js';
 import { HubSocketFeed } from './hubSocketFeed.js';
 import { DirectBinanceFeed } from './directBinanceFeed.js';
+import { WorkerFeed } from './workerFeed.js';
 
 export const DIRECT_MODE = import.meta.env.VITE_DATA_MODE === 'direct';
 
@@ -46,6 +47,11 @@ function hubSocketUrl() {
 /** Build the DataFeed adapter for the current mode. */
 export function createDataFeed() {
   if (DIRECT_MODE) {
+    // Phase 10: run the whole pipeline in a Web Worker so the UI thread only
+    // renders; fall back to in-thread processing where workers don't exist.
+    if (typeof Worker !== 'undefined') {
+      return new WorkerFeed();
+    }
     return new DirectBinanceFeed(SYMBOLS);
   }
   return new HubSocketFeed(hubSocketUrl());

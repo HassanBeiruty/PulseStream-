@@ -57,6 +57,8 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 - **Instrument bar** — big live last price, 24h Δ, bid/ask, **spread in absolute and basis points**, **session VWAP**, 24h high/low/volume, and the live self-built 1m OHLCV bucket.
 - **Live chart** — Chart.js with a **session VWAP benchmark overlay**, backfilled from REST klines on load, then continued from self-built candles.
 - **L2 depth ladder** — live top-10 bids/asks with size bars, spread in bps, mid, and **order-book imbalance**, maintained by a self-built snapshot + sequenced-delta sync engine ([shared/orderBook.js](shared/orderBook.js)).
+- **Cross-venue panel + arb monitor** — a second exchange feed ([Coinbase](shared/coinbaseFeed.js)) through the same normalizer schema; live Binance-vs-Coinbase spread in bps with threshold alerts.
+- **Telemetry HUD** — upstream msgs/s, UI updates/s, **conflated updates/s**, event-time → arrival latency p50/p95, reconnect counts, session uptime, and which runtime the pipeline is on.
 - **Alert ticket** — order-ticket-style panel (▲ Above / ▼ Below sides); triggered alerts toast in-page.
 - **Blotter** — bottom tabs: protocol console, paper positions/orders/fills, and active alerts.
 
@@ -74,6 +76,8 @@ The UI consumes one **`DataFeed` port** ([frontend/src/feed/index.js](frontend/s
 - **Connection status** — `live` / `reconnecting` / `stale` (stale = connection open but no fresh data for >10s).
 - **Self-built 1m OHLCV candles** — aggregated from the trade stream.
 - **Reconnect with exponential backoff + full jitter** — same policy in both runtimes.
+- **Web Worker pipeline (direct mode)** — the whole feed-processing chain runs off the main thread behind the same `DataFeed` port; the UI thread only renders.
+- **IndexedDB candle persistence** — self-built 1m candles survive reloads and merge with the REST backfill window ([frontend/src/candleStore.js](frontend/src/candleStore.js)).
 
 **Engineering**
 - **Unit-tested shared core** — [Vitest](tests/) (51 tests) covers the normalizer, candle aggregator, hub pub-sub, alert book, VWAP, klines mapping, order-book sync rules (buffering, gaps, resync), schema validation, and the full OMS lifecycle (fills, flips through zero, fees, persistence).
@@ -171,6 +175,7 @@ npm run feed:demo
 │   ├── alertBook.js        # Price-alert registry + trigger-once evaluation
 │   ├── oms.js              # Paper-trading OMS (simulated fills, positions, P&L)
 │   ├── orderBook.js        # L2 book: snapshot + sequenced-delta sync, gap resync
+│   ├── coinbaseFeed.js     # Second venue: Coinbase feed handler (isomorphic)
 │   ├── schema.js           # Feed-boundary validation of raw exchange payloads
 │   ├── analytics.js        # Session VWAP (volume-weighted average price)
 │   ├── klines.js           # Binance klines -> internal candle mapping
@@ -181,7 +186,7 @@ npm run feed:demo
 │   └── index.js            # Express + WebSocket distribution server
 ├── frontend/               # React + Vite + Chart.js source
 │   └── src/
-│       ├── feed/           # DataFeed PORT + the two adapters (hub / direct)
+│       ├── feed/           # DataFeed PORT + adapters (hub / direct / Web Worker)
 │       ├── components/     # TickerTape, MarketWatch, TicketPanel (Trade/Alert), Blotter, PriceChart
 │       ├── dataSource.js   # Facade: feed factory + REST helpers
 │       └── format.js       # Price/delta/P&L/spread display formatting

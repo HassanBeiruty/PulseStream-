@@ -20,11 +20,29 @@ export class HubSocketFeed {
     this.url = url;
     this.emitter = new Emitter();
     this.ws = null;
+    // Telemetry: wire messages/sec (conflation happens server-side in hub mode)
+    this.metrics = { received: 0, startedAt: Date.now() };
+    this.metricsInterval = null;
   }
 
   // --- lifecycle -------------------------------------------------------------
 
   connect() {
+    if (!this.metricsInterval) {
+      this.metricsInterval = setInterval(() => {
+        this.emitter.emit('metrics', {
+          runtime: 'main-thread',
+          mode: 'hub',
+          upstreamPerSec: this.metrics.received,
+          emittedPerSec: this.metrics.received,
+          conflatedPerSec: null, // done server-side before the wire
+          reconnects: null, // App counts client-socket reconnects
+          startedAt: this.metrics.startedAt,
+        });
+        this.metrics.received = 0;
+      }, 1000);
+    }
+
     const ws = new WebSocket(this.url);
     this.ws = ws;
 
@@ -33,6 +51,7 @@ export class HubSocketFeed {
     ws.onerror = (err) => this.emitter.emit('error', err);
 
     ws.onmessage = (event) => {
+      this.metrics.received += 1;
       let msg;
       try {
         msg = JSON.parse(event.data);
@@ -72,6 +91,8 @@ export class HubSocketFeed {
   }
 
   close() {
+    clearInterval(this.metricsInterval);
+    this.metricsInterval = null;
     if (this.ws) this.ws.close();
   }
 

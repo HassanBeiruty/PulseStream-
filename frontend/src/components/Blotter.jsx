@@ -5,6 +5,15 @@ import { formatPrice, formatSigned, formatQty } from '../format';
 // Bottom blotter — the tabbed strip every trading terminal has along the
 // bottom: protocol console, paper positions (with live P&L), working orders,
 // fills history, and active price alerts.
+function formatUptime(startedAt) {
+  if (!startedAt) return '—';
+  const totalSec = Math.floor((Date.now() - startedAt) / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+}
+
 function Blotter({
   logs,
   onClearLogs,
@@ -15,6 +24,8 @@ function Blotter({
   openOrders,
   fills,
   onCancelOrder,
+  venues, // [{ symbol, binance, coinbase, bps, listed }]
+  telemetry, // Phase 10 HUD data or null
 }) {
   const [tab, setTab] = useState('console');
   const consoleLogRef = useRef(null);
@@ -36,6 +47,8 @@ function Blotter({
     { id: 'orders', label: `Orders (${openOrders.length})` },
     { id: 'fills', label: `Fills (${fills.length})` },
     { id: 'alerts', label: `Alerts (${alerts.length})` },
+    { id: 'venues', label: 'Venues' },
+    { id: 'telemetry', label: 'Telemetry' },
   ];
 
   return (
@@ -180,6 +193,84 @@ function Blotter({
                   <span className="mw-num">{f.fee.toFixed(4)}</span>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {tab === 'venues' && (
+          <div className="bl-scroll">
+            <div className="bl-head cols-venue">
+              <span>Symbol</span>
+              <span className="mw-num">Binance (USDT)</span>
+              <span className="mw-num">Coinbase (USD)</span>
+              <span className="mw-num">Δ Spread</span>
+            </div>
+            {venues.map((row) => {
+              const bps = row.bps !== null ? formatSigned(row.bps, 1) : null;
+              return (
+                <div key={row.symbol} className="bl-row cols-venue">
+                  <span>{symbolLabel(row.symbol)}</span>
+                  <span className="mw-num">{formatPrice(row.binance)}</span>
+                  <span className="mw-num">
+                    {row.listed ? formatPrice(row.coinbase) : 'not listed'}
+                  </span>
+                  <span className={`mw-num ${bps ? `dir-${bps.dir}` : ''}`}>
+                    {bps ? `${bps.text} bps` : '—'}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="bl-note">
+              Same normalizer schema, two venues — spread includes the USDT/USD basis.
+            </div>
+          </div>
+        )}
+
+        {tab === 'telemetry' && (
+          <div className="bl-scroll telemetry-grid">
+            {telemetry ? (
+              <>
+                <div className="stat-block">
+                  <span className="stat-label">Pipeline</span>
+                  <span className="stat-value">{telemetry.mode} · {telemetry.runtime}</span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Upstream msgs/s</span>
+                  <span className="stat-value">{telemetry.upstreamPerSec}</span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">UI updates/s</span>
+                  <span className="stat-value">{telemetry.emittedPerSec}</span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Conflated/s</span>
+                  <span className="stat-value">
+                    {telemetry.conflatedPerSec === null ? 'server-side' : telemetry.conflatedPerSec}
+                  </span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Latency p50 / p95</span>
+                  <span className="stat-value">
+                    {telemetry.latencyP50 !== null ? `${telemetry.latencyP50}ms / ${telemetry.latencyP95}ms` : '—'}
+                  </span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Feed reconnects</span>
+                  <span className="stat-value">
+                    {telemetry.reconnects === null ? '—' : telemetry.reconnects}
+                  </span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Socket reconnects</span>
+                  <span className="stat-value">{telemetry.clientReconnects}</span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Session uptime</span>
+                  <span className="stat-value">{formatUptime(telemetry.startedAt)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="empty-alerts-text">Waiting for the first metrics heartbeat…</div>
             )}
           </div>
         )}

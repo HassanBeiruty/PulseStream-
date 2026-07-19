@@ -25,6 +25,9 @@ import Blotter from './components/Blotter';
 import PriceChart from './components/PriceChart';
 import { PaperOMS, positionUnrealized } from '../../shared/oms.js';
 import { createEmptyRecord } from '../../shared/hub.js';
+import { mergeCandleHistories } from '../../shared/klines.js';
+import { CoinbaseFeed, COINBASE_PRODUCTS } from '../../shared/coinbaseFeed.js';
+import { saveCandles, loadCandles, pruneCandles } from './candleStore';
 import { fetchHealth, fetchHistory, createDataFeed, feedTargetLabel, symbolLabel, DIRECT_MODE } from './dataSource';
 import { formatPrice, formatDeltaPct, spreadInfo, formatSigned, formatQty } from './format';
 import './App.css';
@@ -62,6 +65,8 @@ function App() {
   const [symbols, setSymbols] = useState([]);
   const [records, setRecords] = useState({});
   const [books, setBooks] = useState({}); // symbol -> L2 depth view
+  const [venues, setVenues] = useState({}); // symbol -> Coinbase venue record
+  const [telemetry, setTelemetry] = useState(null); // Phase 10 HUD data
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [logs, setLogs] = useState([]);
   
@@ -82,6 +87,19 @@ function App() {
   const prevTabPriceRef = useRef(null);
   // Per-symbol throttle state for console heartbeat lines (1 per ~5s)
   const tickLogRef = useRef({});
+  // Telemetry: rolling event-time -> processing latency samples (ms)
+  const latencyRef = useRef([]);
+  const clientReconnectsRef = useRef(0);
+  // Last seen active candle per symbol — a new bucket closes the previous one
+  const prevCandlesRef = useRef({});
+  // Live mirror of records for non-React consumers (arb monitor)
+  const recordsRef = useRef({});
+  // Arb-alert cooldowns per symbol
+  const arbAlertAtRef = useRef({});
+
+  useEffect(() => {
+    recordsRef.current = records;
+  }, [records]);
   // Live mirror of activeAlerts for the reconnect handler: reading the state
   // directly there would capture a stale closure (alerts set after connect
   // would never re-register on reconnect).
@@ -228,17 +246,64 @@ function App() {
     }
 
     logMessage('SYSTEM', `Fetching 1m candle history for ${selectedSymbol}...`);
-    fetchHistory(selectedSymbol)
-      .then((data) => {
-        if (data.candles) {
-          setHistoricalCandles(data.candles);
-          logMessage('SYSTEM', `Successfully backfilled ${data.candles.length} historical candles for ${selectedSymbol}.`);
+    // Phase 11: REST backfill merged with locally persisted candles — history
+    // survives beyond the 100-candle REST window across reloads
+    Promise.all([fetchHistory(selectedSymbol).catch(() => null), loadCandles(selectedSymbol)])
+      .then(([data, stored]) => {
+        const rest = data?.candles || [];
+        const merged = mergeCandleHistories(stored, rest);
+        if (merged.length > 0) {
+          setHistoricalCandles(merged);
+          logMessage(
+            'SYSTEM',
+            `Backfilled ${selectedSymbol}: ${rest.length} REST + ${stored.length} stored -> ${merged.length} candles.`
+          );
+        }
+        if (rest.length > 0) {
+          saveCandles(selectedSymbol, rest).then(() => pruneCandles(selectedSymbol));
         }
       })
       .catch((err) => {
         logMessage('SYSTEM', `Failed to load candle history: ${err.message}`);
       });
   }, [selectedSymbol, watchlist]);
+
+  // Phase 13: second venue — an independent Coinbase feed (isomorphic class;
+  // runs browser-side in both modes as its own consumer). Drives the
+  // cross-venue panel and the arbitrage-spread monitor.
+  useEffect(() => {
+    if (symbols.length === 0) return;
+    const venueFeed = new CoinbaseFeed(symbols.map((s) => s.toUpperCase()));
+
+    venueFeed.on('update', (record) => {
+      setVenues((prev) => ({ ...prev, [record.symbol]: record }));
+
+      // Arb monitor: cross-venue spread >= 10 bps toasts, max once/min/symbol.
+      // (Binance quotes USDT, Coinbase quotes USD — the spread includes the
+      // USDT/USD basis, which is exactly why it's rarely free money.)
+      const binance = recordsRef.current[record.symbol];
+      if (binance?.lastPrice && record.lastPrice) {
+        const mid = (binance.lastPrice + record.lastPrice) / 2;
+        const bps = ((binance.lastPrice - record.lastPrice) / mid) * 10000;
+        if (Math.abs(bps) >= 10) {
+          const lastAlert = arbAlertAtRef.current[record.symbol] || 0;
+          if (Date.now() - lastAlert > 60000) {
+            arbAlertAtRef.current[record.symbol] = Date.now();
+            pushToast(
+              'warning',
+              'Cross-Venue Spread',
+              `${record.symbol}: Binance vs Coinbase ${bps > 0 ? '+' : ''}${bps.toFixed(1)} bps`
+            );
+            logMessage('VENUE', `Arb spread ${record.symbol}: ${bps.toFixed(1)} bps vs Coinbase`);
+          }
+        }
+      }
+    });
+    venueFeed.on('status', (status) => logMessage('VENUE', `Coinbase feed: ${status}`));
+    venueFeed.connect();
+
+    return () => venueFeed.close();
+  }, [symbols]);
 
   // 3. Manage the DataFeed connection. App only wires PORT events here — it
   //    has no idea whether the adapter is our hub socket or direct Binance.
@@ -279,6 +344,18 @@ function App() {
         setBooks((prev) => ({ ...prev, [view.symbol]: view }));
       });
 
+      feed.on('metrics', (m) => {
+        const sorted = [...latencyRef.current].sort((a, b) => a - b);
+        const pct = (p) =>
+          sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : null;
+        setTelemetry({
+          ...m,
+          latencyP50: pct(50),
+          latencyP95: pct(95),
+          clientReconnects: clientReconnectsRef.current,
+        });
+      });
+
       feed.on('feedStatus', ({ status }) => {
         setUpstreamStatus(status);
         logMessage('SYSTEM', `Upstream feed status updated to: ${status}`);
@@ -290,6 +367,23 @@ function App() {
         // Tick the paper OMS with the same golden record (executes any
         // resting limit orders the new top-of-book crosses)
         omsRef.current.onTick(data);
+
+        // Telemetry: event-time -> arrival latency sample (trade updates only)
+        if (data.lastTradeTime) {
+          const lat = latencyRef.current;
+          lat.push(Date.now() - data.lastTradeTime);
+          if (lat.length > 300) lat.shift();
+        }
+
+        // Phase 11: a new minute bucket means the previous candle CLOSED —
+        // persist it to IndexedDB so reloads keep history
+        if (data.activeCandle) {
+          const prevCandle = prevCandlesRef.current[sym];
+          if (prevCandle && data.activeCandle.timestamp > prevCandle.timestamp) {
+            saveCandles(sym, [prevCandle]).then(() => pruneCandles(sym));
+          }
+          prevCandlesRef.current[sym] = data.activeCandle;
+        }
 
         // Console heartbeat: at most ONE line per symbol per 5s, with a
         // conflation count — alive without drowning the protocol log.
@@ -347,6 +441,7 @@ function App() {
 
       feed.on('close', () => {
         if (disposed) return; // deliberate close during cleanup — never reconnect
+        clientReconnectsRef.current += 1;
         logMessage('SYSTEM', 'Data feed disconnected. Reconnecting in 3s...');
         setConnectionStatus('disconnected');
         reconnectTimer = setTimeout(connectFeed, 3000);
@@ -484,6 +579,18 @@ function App() {
     });
   const totalPnl = omsState.totalRealizedPnl + positionsView.reduce((sum, p) => sum + p.uPnl, 0);
   const pnlChip = formatSigned(totalPnl);
+
+  // Cross-venue comparison rows (Phase 13)
+  const venuesView = poolSymbols.map((sym) => {
+    const binance = records[sym]?.lastPrice ?? null;
+    const venueRecord = venues[sym];
+    const coinbase = venueRecord?.lastPrice ?? null;
+    const bps =
+      binance !== null && coinbase !== null
+        ? ((binance - coinbase) / ((binance + coinbase) / 2)) * 10000
+        : null;
+    return { symbol: sym, binance, coinbase, bps, listed: !!COINBASE_PRODUCTS[sym] };
+  });
 
   return (
     <div className="app-container">
@@ -637,6 +744,8 @@ function App() {
           openOrders={omsState.openOrders}
           fills={omsState.fills}
           onCancelOrder={handleCancelOrder}
+          venues={venuesView}
+          telemetry={telemetry}
         />
         </div>
 

@@ -78,6 +78,10 @@ export class DirectBinanceFeed {
     this.staleInterval = null;
     this.opened = false;
     this.closedByClient = false;
+
+    // Telemetry (Phase 10): per-second counters emitted as 'metrics' events
+    this.metrics = { upstream: 0, emitted: 0, conflated: 0, reconnects: 0, startedAt: Date.now() };
+    this.metricsInterval = null;
   }
 
   // --- lifecycle -------------------------------------------------------------
@@ -85,6 +89,23 @@ export class DirectBinanceFeed {
   connect() {
     // Throttled flush: one UPDATE per symbol per interval, like the server
     this.flushInterval = setInterval(() => this.flush(), THROTTLE_MS);
+
+    // Telemetry heartbeat: publish and reset the per-second counters
+    this.metricsInterval = setInterval(() => {
+      const m = this.metrics;
+      this.emitter.emit('metrics', {
+        runtime: typeof window === 'undefined' ? 'worker' : 'main-thread',
+        mode: 'direct',
+        upstreamPerSec: m.upstream,
+        emittedPerSec: m.emitted,
+        conflatedPerSec: m.conflated,
+        reconnects: m.reconnects,
+        startedAt: m.startedAt,
+      });
+      m.upstream = 0;
+      m.emitted = 0;
+      m.conflated = 0;
+    }, 1000);
 
     // Staleness watchdog: the socket can stay "open" while data silently
     // stops (half-open TCP — common after a backgrounded tab or network
@@ -117,6 +138,7 @@ export class DirectBinanceFeed {
     this.closedByClient = true;
     clearInterval(this.flushInterval);
     clearInterval(this.staleInterval);
+    clearInterval(this.metricsInterval);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.upstream) {
       try {
@@ -179,6 +201,7 @@ export class DirectBinanceFeed {
 
     ws.onmessage = (event) => {
       this.lastMessageAt = Date.now();
+      this.metrics.upstream += 1;
       if (this.upstreamStatus === 'stale') this.setUpstreamStatus('live');
 
       let msg;
@@ -210,6 +233,7 @@ export class DirectBinanceFeed {
   scheduleReconnect() {
     if (this.reconnectTimer) return;
     this.reconnectAttempts += 1;
+    this.metrics.reconnects += 1;
 
     const cappedExp = Math.min(
       MAX_RECONNECT_DELAY_MS,
@@ -270,12 +294,14 @@ export class DirectBinanceFeed {
     if (this.pendingUpdates.size > 0) {
       for (const record of this.pendingUpdates.values()) {
         this.emitter.emit('update', record);
+        this.metrics.emitted += 1;
       }
       this.pendingUpdates.clear();
     }
     if (this.pendingBooks.size > 0) {
       for (const view of this.pendingBooks.values()) {
         this.emitter.emit('book', view);
+        this.metrics.emitted += 1;
       }
       this.pendingBooks.clear();
     }
@@ -290,6 +316,9 @@ export class DirectBinanceFeed {
     // Subscribe to Hub updates. Updates buffer for the throttled flush;
     // alert triggers bypass the throttle — same policy as the server.
     const unsubscribe = this.hub.subscribe(sym, (record) => {
+      // Conflation: overwriting an unsent pending record = one dropped
+      // intermediate update (the telemetry HUD counts these)
+      if (this.pendingUpdates.has(sym)) this.metrics.conflated += 1;
       this.pendingUpdates.set(sym, record);
 
       for (const hit of this.alerts.evaluate(sym, record.lastPrice)) {
