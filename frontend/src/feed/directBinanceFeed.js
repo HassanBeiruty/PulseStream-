@@ -71,7 +71,11 @@ export class DirectBinanceFeed {
     this.flushInterval = setInterval(() => this.flush(), THROTTLE_MS);
 
     // Staleness watchdog: the socket can stay "open" while data silently
-    // stops; freshness is what counts, not "connected".
+    // stops (half-open TCP — common after a backgrounded tab or network
+    // blip). Freshness is what counts, not "connected" — so like the server's
+    // feed handler, we don't just REPORT stale, we force a reconnect: close()
+    // fires onclose, which schedules the backoff reconnect. Without this the
+    // page freezes until a manual refresh.
     this.staleInterval = setInterval(() => {
       if (
         this.upstream &&
@@ -81,6 +85,12 @@ export class DirectBinanceFeed {
         this.upstreamStatus !== 'stale'
       ) {
         this.setUpstreamStatus('stale');
+        console.warn('[direct-feed] STALE — no data for >10s; forcing reconnect');
+        try {
+          this.upstream.close();
+        } catch {
+          /* already closing */
+        }
       }
     }, STALE_CHECK_MS);
 

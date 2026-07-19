@@ -230,6 +230,8 @@ header h1 .h1-terminal {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  /* If the viewport is short, scroll the column instead of crushing panels */
+  overflow-y: auto;
 }
 
 .panel {
@@ -371,7 +373,11 @@ header h1 .h1-terminal {
 /* --- Market watch ---------------------------------------------------------------- */
 
 .market-watch {
-  flex: 1.4;
+  flex: 1;
+  /* Never collapse below the height of the full 3-symbol pool — the
+     watchlist must be visible without scrolling */
+  min-height: 248px;
+  flex-shrink: 0;
 }
 
 .mw-scroll {
@@ -536,11 +542,13 @@ header h1 .h1-terminal {
 
 .alert-ticket { flex: 0 0 auto; }
 
+.alert-ticket { flex-shrink: 0; }
+
 .ticket-body {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.7rem 0.8rem 0.8rem;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem 0.7rem;
 }
 
 .ticket-side {
