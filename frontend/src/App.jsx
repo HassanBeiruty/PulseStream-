@@ -23,9 +23,12 @@ import MarketWatch from './components/MarketWatch';
 import TicketPanel from './components/TicketPanel';
 import Blotter from './components/Blotter';
 import PriceChart from './components/PriceChart';
+import DrawingToolbar from './components/DrawingToolbar';
+import { loadSavedDrawings, persistDrawings } from './drawingEngine';
 import { PaperOMS, positionUnrealized } from '../../shared/oms.js';
 import { createEmptyRecord } from '../../shared/hub.js';
 import { mergeCandleHistories } from '../../shared/klines.js';
+import { DEFAULT_TIMEFRAME, resolveTimeframe } from '../../shared/timeframes.js';
 import { CoinbaseFeed, COINBASE_PRODUCTS } from '../../shared/coinbaseFeed.js';
 import { saveCandles, loadCandles, pruneCandles } from './candleStore';
 import { fetchHealth, fetchHistory, createDataFeed, feedTargetLabel, symbolLabel, DIRECT_MODE } from './dataSource';
@@ -74,6 +77,56 @@ function App() {
   const [watchlist, setWatchlist] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [historicalCandles, setHistoricalCandles] = useState([]);
+  // Chart window (1m … 1W). Drives the REST backfill interval AND the bucket
+  // width the live 1m candles are folded into — see shared/timeframes.js.
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
+  const [chartType, setChartType] = useState('candlestick');
+  const [indicators, setIndicators] = useState({
+    ema9: false,
+    ema21: false,
+    sma50: false,
+    sma200: false,
+    bollinger: false,
+    volume: true,
+    vwap: true,
+  });
+  const [interactionMode, setInteractionMode] = useState('crosshair');
+  const [hoveredCandle, setHoveredCandle] = useState(null);
+  const [isChartZoomed, setIsChartZoomed] = useState(false);
+  const [activeRangePreset, setActiveRangePreset] = useState(null);
+  const [showIndicatorsDropdown, setShowIndicatorsDropdown] = useState(false);
+  const [showTfDropdown, setShowTfDropdown] = useState(false);
+  const chartRef = useRef(null);
+
+  // Pro Drawing States
+  const [activeDrawingTool, setActiveDrawingTool] = useState('cursor');
+  const [drawings, setDrawings] = useState([]);
+  const [magnetEnabled, setMagnetEnabled] = useState(true);
+  const [drawingColor, setDrawingColor] = useState('#2962ff');
+
+  // Load drawings on symbol change
+  useEffect(() => {
+    if (selectedSymbol) {
+      setDrawings(loadSavedDrawings(selectedSymbol));
+    }
+  }, [selectedSymbol]);
+
+  const handleUpdateDrawings = (newDrawings) => {
+    setDrawings(newDrawings);
+    if (selectedSymbol) {
+      persistDrawings(selectedSymbol, newDrawings);
+    }
+  };
+
+  const handleUndoDrawing = () => {
+    if (drawings.length === 0) return;
+    const next = drawings.slice(0, drawings.length - 1);
+    handleUpdateDrawings(next);
+  };
+
+  const handleClearDrawings = () => {
+    handleUpdateDrawings([]);
+  };
   
   // Alerts & Notifications States
   const [activeAlerts, setActiveAlerts] = useState([]);
@@ -82,6 +135,32 @@ function App() {
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCondition, setAlertCondition] = useState('ABOVE');
   const [upstreamStatus, setUpstreamStatus] = useState('connecting');
+
+  const RANGE_PRESETS = [
+    { label: '1H', ms: 60 * 60 * 1000, tf: '1m' },
+    { label: '6H', ms: 6 * 60 * 60 * 1000, tf: '5m' },
+    { label: '24H', ms: 24 * 60 * 60 * 1000, tf: '15m' },
+    { label: '7D', ms: 7 * 24 * 60 * 60 * 1000, tf: '1h' },
+    { label: '30D', ms: 30 * 24 * 60 * 60 * 1000, tf: '4h' },
+    { label: '90D', ms: 90 * 24 * 60 * 60 * 1000, tf: '1d' },
+    { label: 'ALL', ms: 'ALL', tf: '1d' },
+  ];
+
+  const handleRangePreset = (preset) => {
+    setActiveRangePreset(preset.label);
+    if (timeframe !== preset.tf && preset.tf) {
+      setTimeframe(preset.tf);
+    }
+    setTimeout(() => {
+      if (chartRef.current) {
+        chartRef.current.fitRangeMs(preset.ms);
+      }
+    }, 150);
+  };
+
+  const toggleIndicator = (key) => {
+    setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const feedRef = useRef(null);
   const prevTabPriceRef = useRef(null);
@@ -238,35 +317,51 @@ function App() {
       });
   }, []);
 
-  // 2. Fetch historical candle data when the selected symbol changes
+  // 2. Fetch historical candle data when the symbol OR the timeframe changes
   useEffect(() => {
     if (!selectedSymbol || !watchlist.includes(selectedSymbol)) {
       setHistoricalCandles([]);
-      return;
+      return undefined;
     }
 
-    logMessage('SYSTEM', `Fetching 1m candle history for ${selectedSymbol}...`);
+    // Switching windows fires a new request while the old one may still be in
+    // flight; this flag drops the loser so a slow 1W response can't overwrite
+    // a freshly selected 1m chart.
+    let cancelled = false;
+    const tf = resolveTimeframe(timeframe);
+
+    logMessage('SYSTEM', `Fetching ${tf.id} candle history for ${selectedSymbol}...`);
     // Phase 11: REST backfill merged with locally persisted candles — history
-    // survives beyond the 100-candle REST window across reloads
-    Promise.all([fetchHistory(selectedSymbol).catch(() => null), loadCandles(selectedSymbol)])
+    // survives beyond the REST window across reloads. The IndexedDB store only
+    // holds our SELF-BUILT 1m candles, so the merge only applies on 1m; wider
+    // windows come from REST alone (500 x 4H is ~83 days — far more than the
+    // ~33h of 1m candles we keep locally).
+    const storedPromise = tf.id === DEFAULT_TIMEFRAME ? loadCandles(selectedSymbol) : Promise.resolve([]);
+
+    Promise.all([fetchHistory(selectedSymbol, tf.id).catch(() => null), storedPromise])
       .then(([data, stored]) => {
+        if (cancelled) return;
         const rest = data?.candles || [];
         const merged = mergeCandleHistories(stored, rest);
+        setHistoricalCandles(merged);
         if (merged.length > 0) {
-          setHistoricalCandles(merged);
           logMessage(
             'SYSTEM',
-            `Backfilled ${selectedSymbol}: ${rest.length} REST + ${stored.length} stored -> ${merged.length} candles.`
+            `Backfilled ${selectedSymbol} ${tf.id}: ${rest.length} REST + ${stored.length} stored -> ${merged.length} candles.`
           );
         }
-        if (rest.length > 0) {
+        if (rest.length > 0 && tf.id === DEFAULT_TIMEFRAME) {
           saveCandles(selectedSymbol, rest).then(() => pruneCandles(selectedSymbol));
         }
       })
       .catch((err) => {
-        logMessage('SYSTEM', `Failed to load candle history: ${err.message}`);
+        if (!cancelled) logMessage('SYSTEM', `Failed to load candle history: ${err.message}`);
       });
-  }, [selectedSymbol, watchlist]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSymbol, watchlist, timeframe]);
 
   // Phase 13: second venue — an independent Coinbase feed (isomorphic class;
   // runs browser-side in both modes as its own consumer). Drives the
@@ -654,7 +749,9 @@ function App() {
               <div className="instrument-bar">
                 <div className="instrument-name">
                   <span className="instrument-symbol">{symbolLabel(selectedSymbol)}</span>
-                  <span className="instrument-sub">{selectedSymbol} · Binance · 1m</span>
+                  <span className="instrument-sub">
+                    {selectedSymbol} · Binance · {resolveTimeframe(timeframe).label}
+                  </span>
                 </div>
                 <FlashPrice price={selectedRecord?.lastPrice} />
                 {selectedDelta && (
@@ -703,6 +800,7 @@ function App() {
               {/* Live self-built 1m candle (the aggregation layer, visible) */}
               {activeCandle && (
                 <div className="ohlc-row">
+                  <span className="ohlc-tag">Self-built 1m</span>
                   <span><b>O</b>{formatPrice(activeCandle.open)}</span>
                   <span><b>H</b>{formatPrice(activeCandle.high)}</span>
                   <span><b>L</b>{formatPrice(activeCandle.low)}</span>
@@ -715,16 +813,365 @@ function App() {
                 </div>
               )}
 
-              {historicalCandles.length > 0 ? (
-                <PriceChart
-                  symbol={selectedSymbol}
-                  historicalCandles={historicalCandles}
-                  activeCandle={activeCandle}
-                  sessionVwap={selectedRecord?.sessionVwap}
+              {/* Pro OHLCV Live / Hovered Bar HUD */}
+              <div className="ohlc-row pro-hud">
+                {(() => {
+                  const bar = hoveredCandle || activeCandle || (historicalCandles.length > 0 ? historicalCandles[historicalCandles.length - 1] : null);
+                  if (!bar) return <span className="ohlc-tag">Waiting for market data…</span>;
+                  const isHover = !!hoveredCandle;
+                  const deltaPct = bar.open ? ((bar.close - bar.open) / bar.open) * 100 : 0;
+                  const isUp = bar.close >= bar.open;
+
+                  return (
+                    <>
+                      <span className={`ohlc-tag ${isHover ? 'tag-hover' : 'tag-live'}`}>
+                        {isHover ? 'Cursor Bar' : `Live ${resolveTimeframe(timeframe).label}`}
+                      </span>
+                      <span className="hud-time">
+                        {new Date(bar.timestamp).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      <span><b>O</b>{formatPrice(bar.open)}</span>
+                      <span><b>H</b>{formatPrice(bar.high)}</span>
+                      <span><b>L</b>{formatPrice(bar.low)}</span>
+                      <span><b>C</b>{formatPrice(bar.close)}</span>
+                      <span className={`hud-delta ${isUp ? 'dir-up' : 'dir-down'}`}>
+                        {isUp ? '+' : ''}{deltaPct.toFixed(2)}%
+                      </span>
+                      <span><b>Vol</b>{bar.volume !== undefined ? formatQty(bar.volume) : '—'}</span>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Pro Chart Toolbar: Timeframes, Chart Type, Indicators, Range Presets, Nav Controls */}
+              <div className="chart-toolbar pro-toolbar">
+                {/* 1. Timeframe Quick Group */}
+                <div className="toolbar-section">
+                  <div className="timeframe-group" role="group" aria-label="Chart timeframe">
+                    {['1m', '5m', '15m', '1h', '4h', '1d', '1w'].map((tfId) => {
+                      const tfObj = resolveTimeframe(tfId);
+                      return (
+                        <button
+                          key={tfId}
+                          type="button"
+                          className={`tf-btn ${timeframe === tfId ? 'active' : ''}`}
+                          onClick={() => {
+                            setTimeframe(tfId);
+                            setActiveRangePreset(null);
+                          }}
+                          aria-pressed={timeframe === tfId}
+                          title={`${tfObj.group} — ${tfObj.label}`}
+                        >
+                          {tfObj.label}
+                        </button>
+                      );
+                    })}
+
+                    {/* More Windows Dropdown Trigger */}
+                    <div className="dropdown-wrap">
+                      <button
+                        type="button"
+                        className={`tf-btn btn-dropdown ${['3m', '30m', '2h', '6h', '12h', '3d'].includes(timeframe) ? 'active' : ''}`}
+                        onClick={() => setShowTfDropdown((prev) => !prev)}
+                        title="All Timeframes"
+                      >
+                        ⏱ More ▾
+                      </button>
+                      {showTfDropdown && (
+                        <div className="pro-dropdown tf-dropdown-menu">
+                          <div className="tf-category">
+                            <span className="tf-cat-title">Minutes</span>
+                            <div className="tf-cat-btns">
+                              {['1m', '3m', '5m', '15m', '30m'].map((id) => (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  className={`tf-sub-btn ${timeframe === id ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setTimeframe(id);
+                                    setActiveRangePreset(null);
+                                    setShowTfDropdown(false);
+                                  }}
+                                >
+                                  {id}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="tf-category">
+                            <span className="tf-cat-title">Hours</span>
+                            <div className="tf-cat-btns">
+                              {['1h', '2h', '4h', '6h', '12h'].map((id) => (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  className={`tf-sub-btn ${timeframe === id ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setTimeframe(id);
+                                    setActiveRangePreset(null);
+                                    setShowTfDropdown(false);
+                                  }}
+                                >
+                                  {id.toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="tf-category">
+                            <span className="tf-cat-title">Days & Weeks</span>
+                            <div className="tf-cat-btns">
+                              {['1d', '3d', '1w'].map((id) => (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  className={`tf-sub-btn ${timeframe === id ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setTimeframe(id);
+                                    setActiveRangePreset(null);
+                                    setShowTfDropdown(false);
+                                  }}
+                                >
+                                  {id.toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Chart Type Selector */}
+                <div className="toolbar-section">
+                  <div className="chart-type-group" role="group" aria-label="Chart style">
+                    {[
+                      { id: 'candlestick', label: '🕯️ Candles', title: 'Candlestick Chart' },
+                      { id: 'heikinAshi', label: '📊 Heikin-Ashi', title: 'Heikin-Ashi Smoothed Trend' },
+                      { id: 'line', label: '📈 Line', title: 'Line Chart' },
+                      { id: 'area', label: '🌊 Area', title: 'Area Glowing Chart' },
+                      { id: 'ohlc', label: '🥢 Bars', title: 'OHLC Tick Bars' },
+                    ].map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        className={`type-switch-btn ${chartType === type.id ? 'active' : ''}`}
+                        onClick={() => setChartType(type.id)}
+                        title={type.title}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Technical Indicators Menu */}
+                <div className="toolbar-section dropdown-wrap">
+                  <button
+                    type="button"
+                    className={`tool-btn ${Object.values(indicators).some(Boolean) ? 'active' : ''}`}
+                    onClick={() => setShowIndicatorsDropdown((prev) => !prev)}
+                    title="Technical Indicators Overlay"
+                  >
+                    📊 Indicators ⚙️
+                  </button>
+                  {showIndicatorsDropdown && (
+                    <div className="pro-dropdown indicators-dropdown-menu">
+                      <div className="dropdown-head">Technical Indicators</div>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.ema9}
+                          onChange={() => toggleIndicator('ema9')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#00e5ff' }}></span>
+                        <span>EMA 9 (Fast)</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.ema21}
+                          onChange={() => toggleIndicator('ema21')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#ffd600' }}></span>
+                        <span>EMA 21 (Medium)</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.sma50}
+                          onChange={() => toggleIndicator('sma50')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#e040fb' }}></span>
+                        <span>SMA 50 (Major)</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.sma200}
+                          onChange={() => toggleIndicator('sma200')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#ff6d00' }}></span>
+                        <span>SMA 200 (Macro)</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.bollinger}
+                          onChange={() => toggleIndicator('bollinger')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#2962ff' }}></span>
+                        <span>Bollinger Bands (20, 2)</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.volume}
+                          onChange={() => toggleIndicator('volume')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#089981' }}></span>
+                        <span>Volume Sub-bars</span>
+                      </label>
+                      <label className="ind-item">
+                        <input
+                          type="checkbox"
+                          checked={indicators.vwap}
+                          onChange={() => toggleIndicator('vwap')}
+                        />
+                        <span className="ind-color-dot" style={{ background: '#9085e9' }}></span>
+                        <span>Session VWAP</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Quick Range Jump Presets */}
+                <div className="toolbar-section">
+                  <div className="range-presets-group" role="group" aria-label="Range presets">
+                    <span className="range-label">Range:</span>
+                    {RANGE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className={`range-btn ${activeRangePreset === preset.label ? 'active' : ''}`}
+                        onClick={() => handleRangePreset(preset)}
+                        title={`Zoom view to last ${preset.label}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Navigation & Zoom Control Buttons */}
+                <div className="toolbar-section nav-controls-section">
+                  <div className="nav-btn-group">
+                    <button
+                      type="button"
+                      className={`nav-btn ${interactionMode === 'crosshair' ? 'active' : ''}`}
+                      onClick={() => setInteractionMode('crosshair')}
+                      title="Crosshair Tool"
+                    >
+                      ✛
+                    </button>
+                    <button
+                      type="button"
+                      className={`nav-btn ${interactionMode === 'pan' ? 'active' : ''}`}
+                      onClick={() => setInteractionMode('pan')}
+                      title="Drag-to-Pan Tool"
+                    >
+                      ✋
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-btn"
+                      onClick={() => chartRef.current?.zoomIn()}
+                      title="Zoom In (+)"
+                    >
+                      ➕
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-btn"
+                      onClick={() => chartRef.current?.zoomOut()}
+                      title="Zoom Out (-)"
+                    >
+                      ➖
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-btn"
+                      onClick={() => chartRef.current?.panLeft()}
+                      title="Pan Left (Back in time)"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-btn"
+                      onClick={() => chartRef.current?.panRight()}
+                      title="Pan Right (Forward in time)"
+                    >
+                      ▶
+                    </button>
+                    <button
+                      type="button"
+                      className={`nav-btn reset-btn ${isChartZoomed ? 'zoomed-active' : ''}`}
+                      onClick={() => {
+                        chartRef.current?.resetView();
+                        setActiveRangePreset(null);
+                      }}
+                      title="Reset View / Follow Live Edge"
+                    >
+                      ⟲ {isChartZoomed ? 'Reset' : ''}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="chart-drawing-layout">
+                <DrawingToolbar
+                  activeTool={activeDrawingTool}
+                  onSelectTool={setActiveDrawingTool}
+                  magnetEnabled={magnetEnabled}
+                  onToggleMagnet={() => setMagnetEnabled((prev) => !prev)}
+                  activeColor={drawingColor}
+                  onChangeColor={setDrawingColor}
+                  onUndo={handleUndoDrawing}
+                  onClearAll={handleClearDrawings}
+                  drawingsCount={drawings.length}
                 />
-              ) : (
-                <div className="chart-empty">Backfilling 1m history…</div>
-              )}
+                <div className="chart-canvas-container">
+                  {historicalCandles.length > 0 ? (
+                    <PriceChart
+                      ref={chartRef}
+                      symbol={selectedSymbol}
+                      timeframe={timeframe}
+                      historicalCandles={historicalCandles}
+                      activeCandle={activeCandle}
+                      sessionVwap={selectedRecord?.sessionVwap}
+                      chartType={chartType}
+                      indicators={indicators}
+                      interactionMode={interactionMode}
+                      activeDrawingTool={activeDrawingTool}
+                      drawings={drawings}
+                      onUpdateDrawings={handleUpdateDrawings}
+                      onUndo={handleUndoDrawing}
+                      magnetEnabled={magnetEnabled}
+                      drawingColor={drawingColor}
+                      onHoverBar={setHoveredCandle}
+                      onZoomChange={setIsChartZoomed}
+                    />
+                  ) : (
+                    <div className="chart-empty">Backfilling {resolveTimeframe(timeframe).label} history…</div>
+                  )}
+                </div>
+              </div>
             </>
           ) : (
             <div className="chart-empty">

@@ -30,6 +30,7 @@ import { VwapCalculator } from '../shared/analytics.js';
 import { OrderBookManager } from '../shared/orderBook.js';
 import { AlertBook } from '../shared/alertBook.js';
 import { klinesToCandles } from '../shared/klines.js';
+import { resolveTimeframe, isTimeframe, TIMEFRAMES } from '../shared/timeframes.js';
 import { ClientMsg, ServerMsg, THROTTLE_MS } from '../shared/protocol.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,16 +72,26 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', symbols: config.symbols, records });
 });
 
-// REST endpoint to fetch 100 historical 1m klines/candles for chart backfill
+// REST endpoint for chart backfill: historical klines/candles for one symbol
+// at one of the configured timeframes (see shared/timeframes.js).
 app.get('/api/history', async (req, res) => {
   const symbol = (req.query.symbol || 'BTCUSDT').toUpperCase();
+  const requested = req.query.interval;
 
   // Validation: ensure the requested symbol is configured
   if (!config.symbols.includes(symbol)) {
     return res.status(400).json({ error: `Invalid symbol. Configured symbols are: ${config.symbols.join(', ')}` });
   }
+  // ...and that the window is one we support (never proxy an arbitrary
+  // interval straight through to the upstream)
+  if (requested !== undefined && !isTimeframe(requested)) {
+    return res
+      .status(400)
+      .json({ error: `Invalid interval. Supported timeframes are: ${TIMEFRAMES.map((t) => t.id).join(', ')}` });
+  }
+  const timeframe = resolveTimeframe(requested);
 
-  const url = `${config.binance.restBase}/klines?symbol=${symbol}&interval=1m&limit=100`;
+  const url = `${config.binance.restBase}/klines?symbol=${symbol}&interval=${timeframe.id}&limit=${timeframe.limit}`;
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -89,7 +100,7 @@ app.get('/api/history', async (req, res) => {
     const data = await response.json();
 
     // Convert Binance's positional kline arrays to our candle format
-    res.json({ symbol, candles: klinesToCandles(data) });
+    res.json({ symbol, interval: timeframe.id, candles: klinesToCandles(data) });
   } catch (err) {
     console.error(`[server] Error fetching history for ${symbol}:`, err.message);
     res.status(500).json({ error: 'Failed to fetch historical market data' });
