@@ -77,6 +77,11 @@ function App() {
   const [watchlist, setWatchlist] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [historicalCandles, setHistoricalCandles] = useState([]);
+  // Which "<symbol>|<timeframe>" the candles above actually belong to. The
+  // chart compares it against the selection so a freshly picked symbol never
+  // folds its live ticks into the previous symbol's series while the backfill
+  // is still in flight.
+  const [historyKey, setHistoryKey] = useState('');
   // Chart window (1m … 1W). Drives the REST backfill interval AND the bucket
   // width the live 1m candles are folded into — see shared/timeframes.js.
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
@@ -146,17 +151,29 @@ function App() {
     { label: 'ALL', ms: 'ALL', tf: '1d' },
   ];
 
+  // A range preset that also switches the timeframe has to wait for that
+  // window's backfill: the chart resets to its default view the moment new
+  // history lands, so firing fitRangeMs on a timer just loses the race.
+  const pendingRangeRef = useRef(null);
+
   const handleRangePreset = (preset) => {
     setActiveRangePreset(preset.label);
-    if (timeframe !== preset.tf && preset.tf) {
+    if (preset.tf && timeframe !== preset.tf) {
+      pendingRangeRef.current = { ms: preset.ms, key: `${selectedSymbol}|${preset.tf}` };
       setTimeframe(preset.tf);
+      return;
     }
-    setTimeout(() => {
-      if (chartRef.current) {
-        chartRef.current.fitRangeMs(preset.ms);
-      }
-    }, 150);
+    pendingRangeRef.current = null;
+    if (chartRef.current) chartRef.current.fitRangeMs(preset.ms);
   };
+
+  useEffect(() => {
+    const pending = pendingRangeRef.current;
+    if (!pending || historyKey !== pending.key) return;
+    pendingRangeRef.current = null;
+    // Child effects run before this one, so the chart has already rebuilt.
+    if (chartRef.current) chartRef.current.fitRangeMs(pending.ms);
+  }, [historyKey]);
 
   const toggleIndicator = (key) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -321,6 +338,7 @@ function App() {
   useEffect(() => {
     if (!selectedSymbol || !watchlist.includes(selectedSymbol)) {
       setHistoricalCandles([]);
+      setHistoryKey('');
       return undefined;
     }
 
@@ -344,6 +362,7 @@ function App() {
         const rest = data?.candles || [];
         const merged = mergeCandleHistories(stored, rest);
         setHistoricalCandles(merged);
+        setHistoryKey(`${selectedSymbol}|${tf.id}`);
         if (merged.length > 0) {
           logMessage(
             'SYSTEM',
@@ -1153,6 +1172,7 @@ function App() {
                       symbol={selectedSymbol}
                       timeframe={timeframe}
                       historicalCandles={historicalCandles}
+                      historyKey={historyKey}
                       activeCandle={activeCandle}
                       sessionVwap={selectedRecord?.sessionVwap}
                       chartType={chartType}

@@ -884,9 +884,47 @@ header h1 .h1-terminal {
   flex: 1;
   min-height: 240px;
   position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 0.5rem 0.75rem 0.75rem;
   touch-action: none;
   overscroll-behavior: contain;
+  /* The canvas is repainted every animation frame while panning/zooming — its
+     own compositor layer keeps that off the rest of the page. */
+  contain: layout paint;
+}
+
+/* Two stacked canvases: Chart.js owns the lower one (candles, axes, saved
+   drawings), the upper one carries the crosshair and the drawing being
+   dragged. Moving the mouse then repaints a dozen lines instead of 1500
+   candles — the reason a pro chart's crosshair never stutters. */
+.chart-stack {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chart-stack > canvas {
+  display: block;
+}
+
+.chart-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Symbol/timeframe switched, its history still in flight: dim what is on
+   screen rather than flashing an empty panel. */
+.chart-canvas-wrap.is-loading .chart-stack {
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+
+.chart-canvas-wrap .chart-stack {
+  transition: opacity 0.18s ease;
 }
 
 .chart-canvas-wrap.mode-crosshair {
