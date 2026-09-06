@@ -16,6 +16,14 @@ jobs:
         with:
           node-version: 22
 
+      # The lockfiles are written by npm 11 locally. Node 22 ships npm 10, whose
+      # peer-dependency resolution builds a different ideal tree (it hoists the
+      # @emnapi/* peers of the wasm bindings that npm 11 leaves nested), so
+      # 'npm ci' would reject an in-sync lockfile as out of sync. Pin the same
+      # major CI-side so the lockfile is validated by the npm that produced it.
+      - name: Pin npm to the version that writes our lockfiles
+        run: npm i -g npm@11
+
       # Shared-core unit tests (normalizer, candles, hub, alerts, VWAP, OMS)
       - name: Install root dependencies
         run: npm ci
