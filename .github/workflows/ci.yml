@@ -16,14 +16,6 @@ jobs:
         with:
           node-version: 22
 
-      # The lockfiles are written by npm 11 locally. Node 22 ships npm 10, whose
-      # peer-dependency resolution builds a different ideal tree (it hoists the
-      # @emnapi/* peers of the wasm bindings that npm 11 leaves nested), so
-      # 'npm ci' would reject an in-sync lockfile as out of sync. Pin the same
-      # major CI-side so the lockfile is validated by the npm that produced it.
-      - name: Pin npm to the version that writes our lockfiles
-        run: npm i -g npm@11
-
       # Shared-core unit tests (normalizer, candles, hub, alerts, VWAP, OMS)
       - name: Install root dependencies
         run: npm ci
@@ -32,9 +24,17 @@ jobs:
         run: npm test
 
       # Frontend: lint + production build (both data modes must compile)
+      #
+      # 'npm install', not 'npm ci': the frontend toolchain (oxlint, rolldown,
+      # lightningcss) ships wasm32-wasi bindings whose @emnapi/* peer deps npm
+      # only hoists into the tree on Linux. A lockfile regenerated on the Windows
+      # dev box therefore can never satisfy 'npm ci' on the Linux runner — it
+      # aborts with "Missing: @emnapi/runtime from lock file". 'npm install' still
+      # honours every version the lockfile pins, and it is the same command the
+      # Vercel build runs (see vercel.json), so CI exercises the real deploy path.
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Lint frontend
         working-directory: frontend
